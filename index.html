@@ -75,7 +75,8 @@
 const $ = id => document.getElementById(id);
 let db = {members:[], keys:[], history:[]};
 const API_KEY = 'smartKeyBoxApiUrl';
-$('apiUrl').value = localStorage.getItem(API_KEY) || '';
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbw9gc0W6nxjFt9wKYl9JCBLiNotoiSWL0ObARfMhnyzsXe_Z0P_9bAUahAYqZWmwnAVjA/exec';
+$('apiUrl').value = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
 
 function setStatus(message, state='wait'){
   $('statusText').textContent=message;
