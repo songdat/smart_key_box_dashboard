@@ -1,76 +1,3 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#101827">
-<title>SMART KEY BOX | Dashboard</title>
-<style>
-:root{--bg:#0b1220;--panel:#111c2e;--panel2:#17243a;--line:#263650;--text:#eaf1fb;--muted:#91a2ba;--green:#35d39a;--blue:#62a8ff;--amber:#f6bd55;--red:#ff7272}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0%,#1a3150 0,transparent 32%),var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
-.wrap{max-width:1200px;margin:auto;padding:24px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}.brand{display:flex;align-items:center;gap:13px}.logo{width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#1d936f,#2466b4);display:grid;place-items:center;font-size:24px;box-shadow:0 8px 25px #0005}.brand h1{font-size:20px;margin:0;letter-spacing:.8px}.brand p{margin:3px 0 0;color:var(--muted);font-size:12px}.actions{display:flex;gap:9px;flex-wrap:wrap}.btn{border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:10px 14px;border-radius:11px;cursor:pointer;font-weight:650}.btn.primary{background:var(--green);color:#06251b;border:0}.btn:disabled{opacity:.5;cursor:wait}.status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;margin:0 0 18px}.dot{width:8px;height:8px;border-radius:50%;background:var(--amber)}.dot.ok{background:var(--green);box-shadow:0 0 10px #35d39a88}.dot.bad{background:var(--red)}
-.notice{display:none;padding:12px 14px;border-radius:12px;background:#3a2029;border:1px solid #75404b;color:#ffd9de;margin-bottom:16px;font-size:13px;white-space:pre-wrap}.notice.show{display:block}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}.card,.section{background:linear-gradient(145deg,#142137,#101a2b);border:1px solid var(--line);border-radius:17px;padding:18px;box-shadow:0 12px 30px #0002}.metric{display:flex;justify-content:space-between;align-items:flex-start}.metric .label{color:var(--muted);font-size:12px}.metric .value{font-size:30px;font-weight:800;margin-top:8px;letter-spacing:-1px}.metric .icon{font-size:22px;background:#243650;border-radius:12px;padding:9px}.sub{font-size:11px;color:var(--muted);margin-top:4px}
-.tabs{display:flex;gap:8px;overflow:auto;margin:18px 0}.tab{white-space:nowrap;border:1px solid var(--line);background:transparent;color:var(--muted);padding:10px 15px;border-radius:11px;cursor:pointer}.tab.active{background:#1c3854;color:#fff;border-color:#37658e}
-.section{padding:0;overflow:hidden}.section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:17px 18px;border-bottom:1px solid var(--line)}.section-head h2{font-size:16px;margin:0}.section-head span{font-size:12px;color:var(--muted)}.tools{display:flex;gap:8px;align-items:center}.search{background:#0c1626;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:9px 11px;min-width:190px;outline:none}
-.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:650px}th,td{text-align:left;padding:13px 16px;border-bottom:1px solid #223149;font-size:13px}th{color:#9eb0c8;font-weight:650;background:#111c2c}td{color:#e0e9f5}tbody tr:hover{background:#ffffff08}.pill{display:inline-flex;padding:5px 9px;border-radius:30px;font-size:11px;background:#26354b;color:#c6d4e7}.pill.good{background:#123e35;color:#7ef0c4}.pill.warn{background:#49391c;color:#ffd27a}.pill.bad{background:#48252d;color:#ffabb4}.empty{padding:34px;text-align:center;color:var(--muted);font-size:13px}
-.keys{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;padding:18px}.key{border:1px solid var(--line);border-radius:13px;padding:14px;background:#0e1929}.key strong{display:block;font-size:14px;margin:7px 0 4px}.key small{color:var(--muted)}.key .symbol{font-size:20px}
-.settings{margin-top:18px}.settings summary{cursor:pointer;color:#a9bad0;font-size:13px;padding:13px 0}.setting-row{display:flex;gap:10px;flex-wrap:wrap;padding-bottom:14px}.setting-row input{flex:1;min-width:240px;background:#0c1626;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:11px}.hint{font-size:11px;color:var(--muted);line-height:1.6;margin:0 0 12px}.foot{text-align:center;color:#64758d;font-size:11px;padding:22px}
-@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.keys{grid-template-columns:repeat(2,1fr)}.top{align-items:flex-start;flex-direction:column}.actions{width:100%}.btn{flex:1}.wrap{padding:16px}}
-@media(max-width:420px){.grid{gap:9px}.card{padding:13px}.metric .value{font-size:25px}.search{min-width:130px;width:100%}.section-head{align-items:flex-start;flex-direction:column}.tools{width:100%}}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header class="top">
-    <div class="brand"><div class="logo">🔐</div><div><h1>SMART KEY BOX</h1><p>ระบบจัดการตู้กุญแจอัจฉริยะ · WEB DASHBOARD</p></div></div>
-    <div class="actions"><button class="btn" id="pingBtn">ตรวจสอบ API</button><button class="btn primary" id="refreshBtn">↻ รีเฟรชข้อมูล</button></div>
-  </header>
-  <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">ยังไม่ได้เชื่อมต่อ Google Sheets API</span><span id="lastUpdate"></span></div>
-  <div class="notice" id="notice"></div>
-
-  <div class="grid">
-    <div class="card"><div class="metric"><div><div class="label">สมาชิกทั้งหมด</div><div class="value" id="memberCount">—</div><div class="sub">ข้อมูลจาก Members</div></div><div class="icon">👥</div></div></div>
-    <div class="card"><div class="metric"><div><div class="label">กุญแจทั้งหมด</div><div class="value" id="keyCount">—</div><div class="sub">ข้อมูลจาก Keys</div></div><div class="icon">🗝️</div></div></div>
-    <div class="card"><div class="metric"><div><div class="label">พร้อมใช้งาน</div><div class="value" id="availableCount">—</div><div class="sub">สถานะกุญแจว่าง</div></div><div class="icon">✅</div></div></div>
-    <div class="card"><div class="metric"><div><div class="label">รายการประวัติ</div><div class="value" id="historyCount">—</div><div class="sub">ข้อมูลจาก History</div></div><div class="icon">📋</div></div></div>
-  </div>
-
-  <nav class="tabs">
-    <button class="tab active" data-tab="overview">ภาพรวมกุญแจ</button>
-    <button class="tab" data-tab="members">สมาชิก</button>
-    <button class="tab" data-tab="keys">กุญแจ</button>
-    <button class="tab" data-tab="history">ประวัติการใช้งาน</button>
-  </nav>
-
-  <section class="section panel" id="overviewPanel">
-    <div class="section-head"><div><h2>สถานะช่องกุญแจ</h2><span>ข้อมูลล่าสุดจาก Google Sheets</span></div><span id="keySummary">รอข้อมูล</span></div>
-    <div class="keys" id="keyGrid"><div class="empty">กรุณาตั้งค่า API URL แล้วกดรีเฟรชข้อมูล</div></div>
-  </section>
-
-  <section class="section panel" id="membersPanel" hidden>
-    <div class="section-head"><div><h2>ทะเบียนสมาชิก</h2><span>Members</span></div><div class="tools"><input class="search" id="memberSearch" placeholder="ค้นหาชื่อ / เบอร์ / รหัส"></div></div>
-    <div class="table-wrap"><table><thead><tr><th>รหัสสมาชิก</th><th>ชื่อ</th><th>Finger ID</th><th>สิทธิ์</th><th>สถานะ</th><th>โทรศัพท์</th></tr></thead><tbody id="membersBody"></tbody></table></div>
-  </section>
-
-  <section class="section panel" id="keysPanel" hidden>
-    <div class="section-head"><div><h2>ทะเบียนกุญแจ</h2><span>Keys</span></div><div class="tools"><input class="search" id="keySearch" placeholder="ค้นหากุญแจ / ผู้ถือ"></div></div>
-    <div class="table-wrap"><table><thead><tr><th>รหัสกุญแจ</th><th>ชื่อกุญแจ</th><th>สถานะ</th><th>รหัสผู้ยืม</th><th>ชื่อผู้ยืม</th></tr></thead><tbody id="keysBody"></tbody></table></div>
-  </section>
-
-  <section class="section panel" id="historyPanel" hidden>
-    <div class="section-head"><div><h2>ประวัติการใช้งาน</h2><span>History</span></div><div class="tools"><input class="search" id="historySearch" placeholder="ค้นหาประวัติ"></div></div>
-    <div class="table-wrap"><table><thead><tr><th>วันและเวลา</th><th>รหัสสมาชิก</th><th>ชื่อ</th><th>รหัสกุญแจ</th><th>กิจกรรม</th></tr></thead><tbody id="historyBody"></tbody></table></div>
-  </section>
-
-  <details class="settings">
-    <summary>⚙ ตั้งค่าการเชื่อมต่อ Google Sheets API</summary>
-    <p class="hint">วาง URL ของ Google Apps Script Web App ที่ลงท้ายด้วย /exec แล้วกดบันทึก URL นี้จะถูกเก็บไว้ในเบราว์เซอร์เครื่องนี้ ไม่ได้ส่งไปที่อื่น</p>
-    <div class="setting-row"><input id="apiUrl" type="url" placeholder="https://script.google.com/macros/s/...../exec"><button class="btn primary" id="saveUrl">บันทึก URL</button></div>
-    <p class="hint">Dashboard รุ่นนี้อ่านข้อมูลผ่าน action=ping และ action=getData ตาม API เดิมก่อน ยังไม่ส่งคำสั่งเพิ่ม/ลบสมาชิกหรือยืมคืนกุญแจ จนกว่าจะเพิ่ม endpoint ฝั่ง Apps Script เพื่อป้องกันข้อมูลเสียหาย</p>
-  </details>
-  <div class="foot">SMART KEY BOX · Google Sheets Database · GitHub Pages</div>
-</div>
 <script>
 const $ = id => document.getElementById(id);
 let db = {members:[], keys:[], history:[]};
@@ -97,7 +24,6 @@ function pick(obj, names){
   return '';
 }
 function normalizePayload(data){
-  // รองรับทั้ง {Members,Keys,History}, {members,keys,history} และข้อมูลซ้อนใน data/result
   let root=data;
   for(let i=0;i<3 && root && !hasCollections(root);i++){
     root=root.data || root.result || root.records || root;
@@ -179,11 +105,12 @@ async function refresh(){
  try{
   const data=await apiRequest('getData');
   db=normalizePayload(data);
-  render();setStatus('เชื่อมต่อ Google Sheets สำเร็จ','ok');
-  $('lastUpdate').textContent='· อัปเดต '+new Date().toLocaleTimeString('th-TH');
- }catch(e){setStatus('โหลดข้อมูลไม่สำเร็จ','bad');showError(e.message+'\n\nหาก ping ผ่านแต่ getData ไม่ผ่าน กรุณาส่งตัวอย่าง JSON ที่ API ส่งกลับมาให้ปรับตัวอ่านข้อมูลให้ตรงกับ API รุ่นเดิม');}
+  render();setStatus('เชื่อมต่อ Google Sheets สำเร็จ (Real-time Auto Sync)','ok');
+  $('lastUpdate').textContent='· อัปเดตล่าสุด '+new Date().toLocaleTimeString('th-TH');
+ }catch(e){setStatus('โหลดข้อมูลไม่สำเร็จ','bad');showError(e.message);}
  finally{$('refreshBtn').disabled=false;}
 }
+
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));
  ['overview','members','keys','history'].forEach(t=>$(t+'Panel').hidden=t!==b.dataset.tab);
@@ -194,7 +121,10 @@ $('refreshBtn').addEventListener('click',refresh);
 $('memberSearch').addEventListener('input',renderMembers);
 $('keySearch').addEventListener('input',renderKeys);
 $('historySearch').addEventListener('input',renderHistory);
-if($('apiUrl').value.trim()) refresh();
+
+if($('apiUrl').value.trim()) {
+  refresh();
+  // ตั้งเวลาให้ดึงข้อมูลใหม่ทุกๆ 7 วินาทีอัตโนมัติ (Real-time)
+  setInterval(refresh, 7000);
+}
 </script>
-</body>
-</html>
