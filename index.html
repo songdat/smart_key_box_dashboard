@@ -156,7 +156,16 @@ function renderKeys(){
 function renderHistory(){
  const q=$('historySearch').value.toLowerCase();
  const rows=[...db.history].reverse().filter(h=>JSON.stringify(h).toLowerCase().includes(q));
- $('historyBody').innerHTML=rows.length?rows.map(h=>`<tr><td>${cell(pick(h,['Timestamp','timestamp','เวลา']))}</td><td>${cell(pick(h,['MemberID','memberId']))}</td><td>${cell(pick(h,['Name','name']))}</td><td>${cell(pick(h,['KeyID','keyId']))}</td><td>${pill(pick(h,['Action','action','กิจกรรม']))}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">ยังไม่มีประวัติการใช้งาน</td></tr>';
+ 
+ $('historyBody').innerHTML=rows.length?rows.map(h=>`
+   <tr>
+     <td>${cell(formatThaiTime(pick(h,['Timestamp','timestamp','เวลา'])))}</td>
+     <td>${cell(pick(h,['MemberID','memberId']))}</td>
+     <td>${cell(pick(h,['Name','name']))}</td>
+     <td>${cell(pick(h,['KeyID','keyId']))}</td>
+     <td>${pill(pick(h,['Action','action','กิจกรรม']))}</td>
+   </tr>
+ `).join(''):'<tr><td colspan="5" class="empty">ยังไม่มีประวัติการใช้งาน</td></tr>';
 }
 
 async function apiRequest(action){
