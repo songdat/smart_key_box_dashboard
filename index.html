@@ -67,7 +67,7 @@
     <summary>⚙ ตั้งค่าการเชื่อมต่อ Google Sheets API</summary>
     <p class="hint">วาง URL ของ Google Apps Script Web App ที่ลงท้ายด้วย /exec แล้วกดบันทึก URL นี้จะถูกเก็บไว้ในเบราว์เซอร์เครื่องนี้ ไม่ได้ส่งไปที่อื่น</p>
     <div class="setting-row"><input id="apiUrl" type="url" placeholder="https://script.google.com/macros/s/...../exec"><button class="btn primary" id="saveUrl">บันทึก URL</button></div>
-    <p class="hint">Dashboard รุ่นนี้อ่านข้อมูลผ่าน action=ping และ action=getData ตาม API เดิมก่อน ยังไม่ส่งคำสั่งเพิ่ม/ลบสมาชิกหรือยืมคืนกุญแจ จนกว่าจะเพิ่ม endpoint ฝั่ง Apps Script เพื่อป้องกันข้อมูลเสียหาย</p>
+    <p class="hint">Dashboard รุ่นนี้อ่านข้อมูลผ่าน action=ping และ action=getData ตาม API เดิม</p>
   </details>
   <div class="foot">SMART KEY BOX · Google Sheets Database · GitHub Pages</div>
 </div>
@@ -80,6 +80,24 @@ const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbw9gc0W6nxjFt9w
 $('apiUrl').value = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
 
 let autoRefreshTimer = null;
+
+// ฟังก์ชันแปลงเวลาให้ออกมาเป็นเวลาประเทศไทย (Asia/Bangkok)
+function formatThaiTime(isoString) {
+  if (!isoString) return "-";
+  let date = new Date(isoString);
+  // ตรวจสอบความถูกต้องของวันที่
+  if (isNaN(date.getTime())) return String(isoString);
+  return date.toLocaleString('th-TH', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+}
 
 function setStatus(message, state='wait'){
   $('statusText').textContent=message;
@@ -189,7 +207,6 @@ async function ping(){
  }catch(e){setStatus('เชื่อมต่อ API ไม่สำเร็จ','bad');showError(e.message);return false;}
 }
 
-// ฟังก์ชันดึงข้อมูล (isSilent ใช้แยกกรณีดึงข้อมูลอัตโนมัติใน background เพื่อไม่ให้เด้งสถานะรบกวน)
 async function refresh(isSilent = false){
  if(!isSilent) {
    $('refreshBtn').disabled=true;
@@ -205,17 +222,15 @@ async function refresh(isSilent = false){
  }catch(e){
   if(!isSilent) {
     setStatus('โหลดข้อมูลไม่สำเร็จ','bad');
-    showError(e.message+'\n\nหาก ping ผ่านแต่ getData ไม่ผ่าน กรุณาส่งตัวอย่าง JSON ที่ API ส่งกลับมาให้ปรับตัวอ่านข้อมูลให้ตรงกับ API รุ่นเดิม');
+    showError(e.message);
   }
  }finally{
   if(!isSilent) $('refreshBtn').disabled=false;
  }
 }
 
-// ตั้งเวลารันระบบ Real-time Auto-Sync
 function startAutoSync() {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer);
-  // ตั้งให้ดึงข้อมูลอัตโนมัติทุกๆ 5 วินาที
   autoRefreshTimer = setInterval(() => {
     if ($('apiUrl').value.trim()) {
       refresh(true);
@@ -248,7 +263,6 @@ $('memberSearch').addEventListener('input',renderMembers);
 $('keySearch').addEventListener('input',renderKeys);
 $('historySearch').addEventListener('input',renderHistory);
 
-// เริ่มทำงานเมื่อโหลดหน้าเว็บ
 if($('apiUrl').value.trim()) {
   refresh(false);
   startAutoSync();
