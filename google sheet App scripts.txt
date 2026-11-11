@@ -1,242 +1,155 @@
 // =================================================================
-// SMART KEY BOX V2 - GOOGLE APPS SCRIPT API (FULL CODE)
-// รองรับ ESP32 Firmware & HTML Web Dashboard Real-time
+// SMART KEY BOX V2 - GAS API (GET & POST DUAL MODE - FIXED)
 // =================================================================
 
 function doPost(e) {
-  var lock = LockService.getScriptLock();
-  // รอคิวการบันทึกข้อมูลสูงสุด 10 วินาที เพื่อป้องกันการแย่งกันเขียนข้อมูล
-  lock.tryLock(10000);
-  
   try {
-    if (!e || !e.postData || !e.postData.contents) {
-      return createJsonResponse({ "success": false, "message": "No post data received" });
+    var data = {};
+    if (e && e.postData && e.postData.contents) {
+      data = JSON.parse(e.postData.contents);
     }
-
-    var data = JSON.parse(e.postData.contents);
-    var action = data.action;
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    
-    // -------------------------------------------------------------
-    // 1. ACTION: addMember (เพิ่มสมาชิกใหม่จากหน้าจอ ESP32)
-    // -------------------------------------------------------------
-    if (action === "addMember") {
-      var memberSheet = ss.getSheetByName("Members");
-      if (!memberSheet) {
-        return createJsonResponse({ "success": false, "message": "Sheet 'Members' not found" });
-      }
-
-      memberSheet.appendRow([
-        data.memberID || "",
-        data.name || "",
-        data.fingerID || "",
-        data.role || "Member",
-        data.status || "Active",
-        data.phone || ""
-      ]);
-
-      return createJsonResponse({ "success": true, "message": "Member added successfully" });
-    }
-    
-    // -------------------------------------------------------------
-    // 2. ACTION: deleteMember (ลบสมาชิกจากหน้าจอ ESP32)
-    // -------------------------------------------------------------
-    if (action === "deleteMember") {
-      var memberSheet = ss.getSheetByName("Members");
-      if (!memberSheet) {
-        return createJsonResponse({ "success": false, "message": "Sheet 'Members' not found" });
-      }
-
-      var rows = memberSheet.getDataRange().getValues();
-      var deleted = false;
-
-      for (var i = 1; i < rows.length; i++) {
-        if (String(rows[i][0]) === String(data.memberID)) {
-          memberSheet.deleteRow(i + 1); // +1 เพราะ Index ของ Sheet เริ่มที่ 1
-          deleted = true;
-          break;
-        }
-      }
-
-      return createJsonResponse({ 
-        "success": deleted, 
-        "message": deleted ? "Member deleted successfully" : "Member ID not found" 
-      });
-    }
-    
-    // -------------------------------------------------------------
-    // 3. ACTION: borrowReturn / logHistory (ยืม-คืนกุญแจจาก ESP32)
-    // -------------------------------------------------------------
-    if (action === "borrowReturn" || action === "logHistory") {
-      var historySheet = ss.getSheetByName("History");
-      if (!historySheet) {
-        return createJsonResponse({ "success": false, "message": "Sheet 'History' not found" });
-      }
-
-      // สร้าง Timestamp เป็นเวลาประเทศไทยอย่างแม่นยำ (Asia/Bangkok)
-      var now = new Date();
-      var thailandTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      var timestamp = Utilities.formatDate(thailandTime, "Asia/Bangkok", "yyyy-MM-dd HH:mm:ss");
-
-      // บันทึกลงในชีต History
-      historySheet.appendRow([
-        timestamp,
-        data.memberID || "",
-        data.name || "",
-        data.keyID || "KEY-01",
-        eventName
-      ]);
-
-      // อัปเดตสถานะในชีต Keys
-      var keySheet = ss.getSheetByName("Keys");
-      if (keySheet) {
-        var keyRows = keySheet.getDataRange().getValues();
-        var targetKeyRaw = String(data.keyID || "KEY-01");
-        var targetKeyNorm = normalizeKeyId(targetKeyRaw);
-
-        for (var j = 1; j < keyRows.length; j++) {
-          var currentKeyRaw = String(keyRows[j][0]);
-          var currentKeyNorm = normalizeKeyId(currentKeyRaw);
-
-          if (currentKeyNorm === targetKeyNorm) {
-            var upperEvent = eventName.toUpperCase();
-            
-            // ตรวจสอบ Event เพื่อเปลี่ยนสถานะให้ถูกต้อง (รองรับทั้งไทยและอังกฤษสำหรับ Dashboard)
-            if (upperEvent.indexOf("RETURN") !== -1) {
-              // คืนกุญแจ -> เปลี่ยนสถานะเป็น "ว่าง" และเคลียร์ชื่อผู้ยืม
-              keySheet.getRange(j + 1, 3).setValue("ว่าง");
-              keySheet.getRange(j + 1, 4).setValue(""); // BorrowerID
-              keySheet.getRange(j + 1, 5).setValue(""); // BorrowerName
-            } else if (upperEvent.indexOf("BORROW") !== -1) {
-              // ยืมกุญแจ -> เปลี่ยนสถานะเป็น "ยืมอยู่" พร้อมบันทึกข้อมูลผู้ยืม
-              keySheet.getRange(j + 1, 3).setValue("ยืมอยู่");
-              keySheet.getRange(j + 1, 4).setValue(data.memberID || "");
-              keySheet.getRange(j + 1, 5).setValue(data.name || "");
-            } else {
-              // กรณีสลับสถานะอัตโนมัติ (Fallback)
-              var currentStatus = String(keyRows[j][2]);
-              if (currentStatus.indexOf("ยืม") !== -1 || currentStatus.indexOf("ไม่ว่าง") !== -1) {
-                keySheet.getRange(j + 1, 3).setValue("ว่าง");
-                keySheet.getRange(j + 1, 4).setValue("");
-                keySheet.getRange(j + 1, 5).setValue("");
-              } else {
-                keySheet.getRange(j + 1, 3).setValue("ยืมอยู่");
-                keySheet.getRange(j + 1, 4).setValue(data.memberID || "");
-                keySheet.getRange(j + 1, 5).setValue(data.name || "");
-              }
-            }
-            break;
-          }
-        }
-      }
-
-      return createJsonResponse({ "success": true, "message": "History and Key status updated successfully" });
-    }
-    
-    return createJsonResponse({ "success": false, "message": "Unknown action: " + action });
-    
-  } catch (error) {
-    return createJsonResponse({ "success": false, "message": error.toString() });
-  } finally {
-    lock.releaseLock();
+    return handleAction(data);
+  } catch (err) {
+    return createJsonResponse({ "success": false, "message": "POST Error: " + err.toString() });
   }
 }
 
-// =================================================================
-// GET REQUESTS (สำหรับ Web Dashboard ดึงข้อมูลเรียลไทม์)
-// =================================================================
 function doGet(e) {
-  var action = e.parameter.action;
+  try {
+    var params = e && e.parameter ? e.parameter : {};
+    
+    // กรณีมีการส่ง payload มาแบบ URL-encoded ในพารามิเตอร์ "data"
+    if (params.data) {
+      var decodedData = JSON.parse(params.data);
+      return handleAction(decodedData);
+    }
+    
+    var action = params.action;
+    if (!action) {
+      return createJsonResponse({ success: true, message: "SMART KEY BOX V2 API IS ACTIVE" });
+    }
+    
+    return handleAction(params);
+    
+  } catch (err) {
+    return createJsonResponse({ "success": false, "message": "GET Error: " + err.toString() });
+  }
+}
+
+// 🛠️ รวมชุดคำสั่งทั้งหมดไว้ภายในฟังก์ชัน handleAction อย่างถูกต้อง
+function handleAction(data) {
+  var action = data.action;
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   
+  if (action === "ping") {
+    return createJsonResponse({ "success": true, "message": "PONG" });
+  }
+
+  // -------------------------------------------------------------
+  // 1. ACTION: addMember
+  // -------------------------------------------------------------
   if (action === "addMember") {
-    var sheet = ss.getSheetByName("Members");
-    sheet.appendRow([
-      e.parameter.memberID,             // A: MemberID
-      e.parameter.name,               // B: Name
-      e.parameter.phone,              // C: Phone
-      e.parameter.fingerID,           // D: FingerID
-      e.parameter.role || "Member",   // E: Role (ถ้าไม่ได้ส่งมา จะบันทึกเป็น "Member" อัตโนมัติ)
-      e.parameter.status || "Active", // F: Status
-      new Date()                      // G: Timestamp
+    var memberSheet = ss.getSheetByName("Members");
+    if (!memberSheet) return createJsonResponse({ "success": false, "message": "Sheet Members not found" });
+
+    var now = new Date();
+    var timestamp = Utilities.formatDate(now, "Asia/Bangkok", "yyyy-MM-dd HH:mm:ss");
+
+    memberSheet.appendRow([
+      String(data.memberID || "").trim(),
+      String(data.name || "").trim(),
+      String(data.fingerID || "").trim(),
+      String(data.role || "Member").trim(),
+      String(data.status || "Active").trim(),
+      String(data.phone || "").trim(),
+      timestamp
     ]);
-    
-    return ContentService.createTextOutput(JSON.stringify({success: true}))
-      .setMimeType(ContentService.MimeType.JSON);
+
+    return createJsonResponse({ "success": true, "message": "Member added successfully" });
   }
   
-  else if (action === "deleteMember") {
-    var sheet = ss.getSheetByName("Members");
-    var data = sheet.getDataRange().getValues();
-    for (var i = 1; i < data.length; i++) {
-      // ตรวจสอบคอลัมน์ A (index 0) ว่าตรงกับ memberID ที่ส่งมาลบหรือไม่
-      if (String(data[i][0]) === String(e.parameter.memberID)) {
-        sheet.deleteRow(i + 1);
+  // -------------------------------------------------------------
+  // 2. ACTION: deleteMember
+  // -------------------------------------------------------------
+  if (action === "deleteMember") {
+    var memberSheet = ss.getSheetByName("Members");
+    if (!memberSheet) return createJsonResponse({ "success": false, "message": "Sheet Members not found" });
+
+    var rows = memberSheet.getDataRange().getValues();
+    var deleted = false;
+    var targetID = String(data.memberID || "").trim();
+
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]).trim() === targetID && targetID !== "") {
+        memberSheet.deleteRow(i + 1);
+        deleted = true;
         break;
       }
     }
-    return ContentService.createTextOutput(JSON.stringify({success: true}))
-      .setMimeType(ContentService.MimeType.JSON);
+
+    return createJsonResponse({ "success": true, "message": deleted ? "Deleted" : "Not found in sheet" });
   }
 
-  else if (action === "ping") {
-    return ContentService.createTextOutput(JSON.stringify({success: true, message: "PONG"}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-// =================================================================
-// HELPER FUNCTIONS
-// =================================================================
+  // -------------------------------------------------------------
+  // 3. ACTION: borrowReturn / logHistory
+  // -------------------------------------------------------------
+  if (action === "borrowReturn" || action === "logHistory") {
+    var historySheet = ss.getSheetByName("History");
+    if (!historySheet) return createJsonResponse({ "success": false, "message": "Sheet History not found" });
 
-// ฟังก์ชันปรับรูปแบบ Key ID ให้เทียบตรงกันเสมอ (เช่น KEY-1, KEY-01 -> KEY01)
-function normalizeKeyId(str) {
-  if (!str) return "";
-  var s = String(str).toUpperCase().replace(/[^A-Z0-9]/g, ""); // ตัดตัวอักษรพิเศษ/ขีดออก
-  var match = s.match(/^([A-Z]+)(\d+)$/);
-  if (match) {
-    var prefix = match[1];
-    var num = parseInt(match[2], 10);
-    return prefix + (num < 10 ? "0" + num : num); // บังคับเติม 0 นำหน้าเสมอ
-  }
-  return s;
-}
+    var eventName = data.event || "UNKNOWN";
+    var now = new Date();
+    var timestamp = Utilities.formatDate(now, "Asia/Bangkok", "yyyy-MM-dd HH:mm:ss");
 
-// ฟังก์ชันแปลงตาราง Sheet เป็น Array ของ JSON Object
-function getSheetObjectData(sheet) {
-  if (!sheet) return [];
-  
-  var rows = sheet.getDataRange().getValues();
-  if (rows.length < 2) return []; // ไม่มีข้อมูลนอกจาก Header
-  
-  var headers = rows[0];
-  var result = [];
-  
-  for (var i = 1; i < rows.length; i++) {
-    var row = rows[i];
-    var obj = {};
-    var hasValue = false;
-    
-    for (var j = 0; j < headers.length; j++) {
-      var headerName = String(headers[j]).trim();
-      var cellValue = row[j];
-      
-      // จัดรูปแบบ Timestamp ให้เป็น String อ่านง่ายในเวลาประเทศไทย
-      if (cellValue instanceof Date) {
-        cellValue = Utilities.formatDate(cellValue, "Asia/Bangkok", "yyyy-MM-dd HH:mm:ss");
+    historySheet.appendRow([
+      timestamp,
+      String(data.memberID || "").trim(),
+      String(data.name || "").trim(),
+      String(data.keyID || "KEY-01").trim(),
+      eventName
+    ]);
+
+    return createJsonResponse({ "success": true, "message": "History updated" });
+  }
+
+  // -------------------------------------------------------------
+  // 4. ACTION: updateKeyStatus (อัปเดตสถานะแท็บ Keys ให้ลงถูกคอลัมน์)
+  // -------------------------------------------------------------
+  if (action === "updateKeyStatus") {
+    var keysSheet = ss.getSheetByName("Keys");
+    if (!keysSheet) return createJsonResponse({ "success": false, "message": "Sheet Keys not found" });
+
+    var keyID = String(data.keyID || "").trim(); // เช่น KEY-02
+    var status = String(data.status || "").trim(); // เช่น "Available" หรือ "Borrowed"
+    var borrower = String(data.borrower || "").trim(); // ชื่อผู้ยืม
+
+    var rows = keysSheet.getDataRange().getValues();
+    var updated = false;
+
+    // ค้นหาแถวที่ตรงกับ Key ID (สมมติว่า Col 1 หรือ Index 0 คือ KeyID)
+    for (var i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]).trim() === keyID) {
+        
+        // 📌 ปรับเลขคอลัมน์ให้ตรงกับหัวตารางจริงของคุณ:
+        // Col 3 (คอลัมน์ C) = Status
+        // Col 4 (คอลัมน์ D) = BorrowerName (ชื่อผู้ยืม)
+        // Col 5 (คอลัมน์ E) = Timestamp (เวลาอัปเดตล่าสุด)
+        
+        keysSheet.getRange(i + 1, 3).setValue(status);   
+        keysSheet.getRange(i + 1, 4).setValue(borrower); 
+        keysSheet.getRange(i + 1, 5).setValue(Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyy-MM-dd HH:mm:ss")); 
+        
+        updated = true;
+        break;
       }
-      
-      obj[headerName] = cellValue;
-      if (cellValue !== "") hasValue = true;
     }
-    
-    if (hasValue) {
-      result.push(obj);
-    }
+
+    return createJsonResponse({ "success": true, "message": updated ? "Key status updated" : "Key ID not found in sheet" });
   }
-  return result;
+
+  return createJsonResponse({ "success": false, "message": "Unknown action: " + action });
 }
 
-// ฟังก์ชันส่งคืน Response แบบ JSON
 function createJsonResponse(data) {
   return ContentService
     .createTextOutput(JSON.stringify(data))
