@@ -19,7 +19,7 @@ const char* WIFI_SSID = "IPS-Library_2.4G";
 const char* WIFI_PASSWORD = "042515888";
 
 const char* GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbzhxPeuO4xKysVe3cLxYqW23mcmFrgClfZk6qdwAyzd4rjYc352m1GWaYoDKKsT_SLKhg/exec";
+  "https://script.google.com/macros/s/AKfycbxDRWRKT7ZTsYqJC8ysXZgy7qADFCDZidnacem6X1rO4_NuAqYeaTHvyNcpo-6InsAqRw/exec";
 
 bool wifiReady = false;
 bool googleSheetsReady = false;
@@ -194,7 +194,7 @@ void convertTouch(int rawX, int rawY, int &screenX, int &screenY) {
 // WIFI CONNECTION & AUTO-RECONNECT
 // =====================================
 void connectWiFi() {
-  Serial.println("\nConnecting to WiFi...");
+  Serial.println("\n[WIFI] Connecting to WiFi...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -206,34 +206,32 @@ void connectWiFi() {
 
   wifiReady = (WiFi.status() == WL_CONNECTED);
   if (wifiReady) {
-    Serial.println("\nWIFI CONNECTED");
-    Serial.print("IP ADDRESS: ");
+    Serial.println("\n[WIFI] CONNECTED SUCCESSFULLY!");
+    Serial.print("[WIFI] IP ADDRESS: ");
     Serial.println(WiFi.localIP());
   } else {
-    Serial.println("\nWIFI CONNECTION FAILED");
+    Serial.println("\n[WIFI ERROR] CONNECTION FAILED TIMEOUT!");
   }
 }
 
 void checkWiFiAutoReconnect() {
-  static unsigned long lastCheck = 0;
-  if (millis() - lastCheck < 10000) return;
-  lastCheck = millis();
-
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi connection lost! Reconnecting...");
-    wifiReady = false;
+    Serial.println("[WIFI WARNING] Connection lost! Reconnecting...");
     WiFi.disconnect();
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     
-    unsigned long startWait = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - startWait < 5000) {
-      delay(250);
+    unsigned long startAttemptTime = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
+      delay(500);
       Serial.print(".");
     }
-
+    
     if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\n[WIFI] Reconnected successfully!");
       wifiReady = true;
-      Serial.println("\nWiFi Reconnected!");
+    } else {
+      Serial.println("\n[WIFI ERROR] Reconnect failed! Will retry later.");
+      wifiReady = false;
     }
   } else {
     wifiReady = true;
@@ -241,69 +239,98 @@ void checkWiFiAutoReconnect() {
 }
 
 // =====================================
-// GOOGLE SHEETS REQUEST
+// HELPER: URL ENCODE
+// =====================================
+String urlEncode(String str) {
+  String encoded = "";
+  char c;
+  char code0;
+  char code1;
+  for (int i = 0; i < str.length(); i++) {
+    c = str.charAt(i);
+    if (isalnum(c)) {
+      encoded += c;
+    } else {
+      code1 = (c & 0xf) + '0';
+      if ((c & 0xf) > 9) code1 = (c & 0xf) - 10 + 'A';
+      c = (c >> 4) & 0xf;
+      code0 = c + '0';
+      if (c > 9) code0 = c - 10 + 'A';
+      encoded += '%';
+      encoded += code0;
+      encoded += code1;
+    }
+  }
+  return encoded;
+}
+
+// =====================================
+// GOOGLE SHEETS REQUEST (GET MODE - FIXED 405 REDIRECT)
 // =====================================
 bool sendGoogleRequest(const String &payload) {
+  Serial.println("\n--- [GOOGLE REQUEST START (GET MODE)] ---");
+  Serial.print("[PAYLOAD SEND]: ");
+  Serial.println(payload);
+
   checkWiFiAutoReconnect();
   if (WiFi.status() != WL_CONNECTED) {
     wifiReady = false;
+    Serial.println("[HTTP ERROR] WiFi not connected.");
     return false;
   }
   wifiReady = true;
+
+  String encodedPayload = urlEncode(payload);
+  String fullUrl = String(GOOGLE_SCRIPT_URL) + "?data=" + encodedPayload;
 
   WiFiClientSecure client;
   client.setInsecure();
 
   HTTPClient http;
   http.setTimeout(20000);
-  http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
-  if (!http.begin(client, GOOGLE_SCRIPT_URL)) return false;
-
-  http.addHeader("Content-Type", "application/json");
-  int statusCode = http.POST(payload);
-
-  if (statusCode == 301 || statusCode == 302 || statusCode == 303 || statusCode == 307 || statusCode == 308) {
-    String redirectUrl = http.getLocation();
-    http.end();
-
-    if (redirectUrl.length() > 0) {
-      HTTPClient httpRedirect;
-      httpRedirect.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
-      if (httpRedirect.begin(client, redirectUrl)) {
-        httpRedirect.addHeader("Content-Type", "application/json");
-        statusCode = httpRedirect.POST(payload);
-        String response = httpRedirect.getString();
-        bool success = false;
-        if (statusCode >= 200 && statusCode < 300) {
-          DynamicJsonDocument doc(2048);
-          if (!deserializeJson(doc, response)) {
-            success = doc["success"] | false;
-          }
-        }
-        httpRedirect.end();
-        googleSheetsReady = success;
-        return success;
-      }
-    }
+  if (!http.begin(client, fullUrl)) {
+    Serial.println("[HTTP ERROR] http.begin() failed.");
+    return false;
   }
 
+  int statusCode = http.GET();
   String response = http.getString();
+  
+  Serial.print("[HTTP STATUS CODE]: ");
+  Serial.println(statusCode);
+  Serial.print("[HTTP RESPONSE BODY]: ");
+  Serial.println(response);
+
   bool success = false;
   if (statusCode >= 200 && statusCode < 300) {
     DynamicJsonDocument doc(2048);
-    if (!deserializeJson(doc, response)) {
+    DeserializationError err = deserializeJson(doc, response);
+    if (err) {
+      Serial.print("[JSON ERROR] Parse failed: ");
+      Serial.println(err.c_str());
+    } else {
       success = doc["success"] | false;
+      Serial.print("[JSON PARSE SUCCESS]: ");
+      Serial.println(success ? "TRUE" : "FALSE");
     }
+  } else {
+    Serial.println("[HTTP ERROR] Status code out of 2xx range.");
   }
 
   http.end();
   googleSheetsReady = success;
+  Serial.println("--- [GOOGLE REQUEST END] ---\n");
   return success;
 }
 
 bool testGoogleSheets() {
-  if (WiFi.status() != WL_CONNECTED) return false;
+  Serial.println("[PING] Testing Google Sheets connection...");
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[PING ERROR] WiFi disconnected.");
+    return false;
+  }
 
   WiFiClientSecure client;
   client.setInsecure();
@@ -314,10 +341,18 @@ bool testGoogleSheets() {
   http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
   http.setTimeout(15000);
 
-  if (!http.begin(client, url)) return false;
+  if (!http.begin(client, url)) {
+    Serial.println("[PING ERROR] http.begin() failed.");
+    return false;
+  }
 
   int code = http.GET();
   String response = http.getString();
+  Serial.print("[PING STATUS CODE]: ");
+  Serial.println(code);
+  Serial.print("[PING RESPONSE]: ");
+  Serial.println(response);
+
   bool success = false;
   if (code >= 200 && code < 300) {
     DynamicJsonDocument doc(1024);
@@ -328,6 +363,7 @@ bool testGoogleSheets() {
 
   http.end();
   googleSheetsReady = success;
+  Serial.println(success ? "[PING] Google Sheets Connected Successfully!" : "[PING] Google Sheets Ping Failed!");
   return success;
 }
 
@@ -340,6 +376,11 @@ String generateMemberID(int slot) {
 }
 
 bool logHistory(String memberID, String name, String keyID, String eventName) {
+  Serial.print("[LOG HISTORY] Event: ");
+  Serial.print(eventName);
+  Serial.print(" | Member: ");
+  Serial.println(name);
+  
   DynamicJsonDocument doc(512);
   doc["action"] = "logHistory";
   doc["memberID"] = memberID;
@@ -356,6 +397,7 @@ bool logHistory(String memberID, String name, String keyID, String eventName) {
 // SAVE & LOAD MEMBERS TO FLASH
 // =====================================
 void saveMembersToFlash() {
+  Serial.println("[FLASH] Saving members to local Flash memory...");
   Preferences prefs;
   prefs.begin("members", false);
   for (int i = 0; i < MAX_KEYS; i++) {
@@ -369,9 +411,11 @@ void saveMembersToFlash() {
     }
   }
   prefs.end();
+  Serial.println("[FLASH] Save completed.");
 }
 
 void loadMembersFromFlash() {
+  Serial.println("[FLASH] Loading members from local Flash memory...");
   Preferences prefs;
   prefs.begin("members", true);
   for (int i = 0; i < MAX_KEYS; i++) {
@@ -382,6 +426,10 @@ void loadMembersFromFlash() {
       keyData[i].name = prefs.getString((keyPrefix + "name").c_str(), "");
       keyData[i].phone = prefs.getString((keyPrefix + "phone").c_str(), "");
       keyData[i].fingerID = prefs.getUShort((keyPrefix + "fid").c_str(), 0);
+      Serial.print(" - Slot ");
+      Serial.print(i);
+      Serial.print(": Loaded Name = ");
+      Serial.println(keyData[i].name);
     } else {
       keyData[i].memberID = "";
       keyData[i].name = "";
@@ -390,42 +438,42 @@ void loadMembersFromFlash() {
     }
   }
   prefs.end();
+  Serial.println("[FLASH] Load completed.");
 }
 
 // =====================================
-// MOTOR & BUZZER (ESP32 CORE v2.x Standard)
+// MOTOR & BUZZER
 // =====================================
-void soundBuzzer() {
-  tone(BUZZER_PIN, 2600, 200); 
-  delay(200);                  
-  noTone(BUZZER_PIN);          
+#define BUZZer_CHANNEL 0
+
+void initBuzzer() {
+  ledcSetup(BUZZer_CHANNEL, 2000, 8);
+  ledcAttachPin(BUZZER_PIN, BUZZer_CHANNEL);
+  ledcWrite(BUZZer_CHANNEL, 0);
 }
 
-void soundSystemReady() {
-  tone(BUZZER_PIN, 2000, 100);
-  delay(150);
-  tone(BUZZER_PIN, 2500, 150);
-  delay(150);
-  noTone(BUZZER_PIN);
+void playTone(uint32_t frequency, uint32_t duration) {
+  ledcSetup(BUZZer_CHANNEL, frequency, 8);
+  ledcAttachPin(BUZZER_PIN, BUZZer_CHANNEL);
+  ledcWrite(BUZZer_CHANNEL, 128);
+  delay(duration);
+  ledcWrite(BUZZer_CHANNEL, 0);
 }
 
-void soundFingerSuccess() {
-  tone(BUZZER_PIN, 3000, 300);
-  delay(300);
-  noTone(BUZZER_PIN);
-}
+void soundBuzzer() { playTone(2600, 200); }
+void soundSystemReady() { playTone(2000, 100); delay(150); playTone(2500, 150); }
+void soundFingerSuccess() { playTone(3000, 300); }
 
 void motorStop() {
   digitalWrite(MOTOR_IN1, LOW);
   digitalWrite(MOTOR_IN2, LOW);
 }
 
-// 👉 [จุดที่ 1] ปรับฟังก์ชันเบรกให้รับค่าเวลาหน่วง (Millisecond) ได้
 void motorBrake(int brakeDelayTime) {
   digitalWrite(MOTOR_IN1, HIGH);
-  digitalWrite(MOTOR_IN2, HIGH); // ช็อตขั้วมอเตอร์ใน L298N เพื่อสร้างแรงต้าน (Dynamic Brake)
-  delay(brakeDelayTime);         // หน่วงเวลาแช่แรงเบรกตามที่ส่งค่าเข้ามา
-  motorStop();                   // ตัดไฟกลับมาเป็นปกติเพื่อไม่ให้บอร์ดร้อน
+  digitalWrite(MOTOR_IN2, HIGH); 
+  delay(brakeDelayTime);         
+  motorStop();                   
 }
 
 void motorOpenLeft() {
@@ -439,37 +487,46 @@ void motorCloseRight() {
 }
 
 void runDoorCycle() {
-  // สั่งเปิดประตู (วิ่งไปทางซ้าย)
+  Serial.println("[MOTOR] Opening door (Moving Left)...");
   motorOpenLeft();
   unsigned long startTime = millis();
   while (digitalRead(LIMIT_LEFT_PIN) == HIGH) {
-    if (millis() - startTime > 15000) break;
+    if (millis() - startTime > 15000) {
+      Serial.println("[MOTOR WARNING] Limit left timeout!");
+      break;
+    }
     delay(5);
   }
   
-  // 👉 [จุดที่ 2.1] ตอนเปิด ใช้เวลาเบรกสั้นๆ พอ (เช่น 100ms)
   motorBrake(100);
+  Serial.println("[MOTOR] Door opened. Holding for 4 seconds...");
   delay(4000);
 
-  // สั่งปิดประตู (วิ่งไปทางขวา)
+  Serial.println("[MOTOR] Closing door (Moving Right)...");
   motorCloseRight();
   startTime = millis();
   while (digitalRead(LIMIT_RIGHT_PIN) == HIGH) {
-    if (millis() - startTime > 15000) break;
+    if (millis() - startTime > 15000) {
+      Serial.println("[MOTOR WARNING] Limit right timeout!");
+      break;
+    }
     delay(5);
   }
   
-  // 👉 [จุดที่ 2.2] ตอนปิด กำหนดเวลาเบรกให้นานขึ้น (เช่น 300ms ตามที่คุณต้องการ) 
-  // เพื่อแช่แรงต้านรอให้แรงเหวี่ยงที่ทำให้ประตูเด้งกลับหมดลง
   motorBrake(300);
+  Serial.println("[MOTOR] Door cycle completed.");
 }
+
 // =====================================
 // INITIALIZE MCP23017 & AS608
 // =====================================
 bool initializeMCP23017() {
   Wire.begin(MCP_SDA, MCP_SCL);
-  if (!mcp.begin_I2C(MCP_ADDRESS)) return false;
-
+  if (!mcp.begin_I2C(MCP_ADDRESS)) {
+    Serial.println("[MCP23017 ERROR] Failed to find MCP23017 chip!");
+    return false;
+  }
+  Serial.println("[MCP23017] Initialized successfully.");
   for (int i = 0; i < MAX_KEYS; i++) {
     mcp.pinMode(i, INPUT_PULLUP);
     keyPresent[i] = false;
@@ -491,13 +548,19 @@ void readKeyStatus() {
 }
 
 bool initializeFingerprint() {
+  Serial.println("[FINGERPRINT] Initializing AS608 sensor...");
   fingerSerial.begin(57600, SERIAL_8N1, AS608_RX_PIN, AS608_TX_PIN);
   delay(500);
   finger.begin(57600);
   delay(500);
 
-  if (!finger.verifyPassword()) return false;
+  if (!finger.verifyPassword()) {
+    Serial.println("[FINGERPRINT ERROR] Did not find fingerprint sensor!");
+    return false;
+  }
   finger.getParameters();
+  Serial.print("[FINGERPRINT] Sensor connected. Capacity: ");
+  Serial.println(finger.capacity);
   return finger.capacity > 0;
 }
 
@@ -506,6 +569,8 @@ uint16_t findAvailableFingerID() {
   preferences.begin("smartkey", false);
   uint16_t nextID = preferences.getUShort("nextID", 1);
   preferences.end();
+  Serial.print("[FINGERPRINT] Next available Finger ID: ");
+  Serial.println(nextID);
   if (nextID < 1 || nextID > finger.capacity) return 0;
   return nextID;
 }
@@ -521,9 +586,14 @@ bool waitForFingerImage(const String &title, const String &message) {
   drawEnrollMessage(title, message);
   unsigned long startTime = millis();
   while (millis() - startTime < 20000) {
-    if (finger.getImage() == FINGERPRINT_OK) return true;
+    uint8_t p = finger.getImage();
+    if (p == FINGERPRINT_OK) {
+      Serial.println("[FINGERPRINT] Image captured successfully.");
+      return true;
+    }
     delay(100);
   }
+  Serial.println("[FINGERPRINT ERROR] Image capture timeout.");
   return false;
 }
 
@@ -531,24 +601,31 @@ bool waitForFingerRemoval() {
   drawEnrollMessage("LIFT YOUR FINGER", "Remove finger from sensor");
   unsigned long startTime = millis();
   while (millis() - startTime < 15000) {
-    if (finger.getImage() == FINGERPRINT_NOFINGER) return true;
+    if (finger.getImage() == FINGERPRINT_NOFINGER) {
+      Serial.println("[FINGERPRINT] Finger removed.");
+      return true;
+    }
     delay(100);
   }
+  Serial.println("[FINGERPRINT ERROR] Finger removal timeout.");
   return false;
 }
 
 bool scanFingerprintTwice() {
+  Serial.println("\n--- [ENROLL START] ---");
   fingerprintModelReady = false;
   pendingFingerID = 0;
 
   if (!fingerprintReady) {
     enrollStatus = "AS608 not connected";
+    Serial.println("[ENROLL ERROR] AS608 not ready.");
     return false;
   }
 
   uint16_t freeID = findAvailableFingerID();
   if (freeID == 0) {
     enrollStatus = "No free fingerprint ID";
+    Serial.println("[ENROLL ERROR] No free fingerprint ID.");
     return false;
   }
 
@@ -561,11 +638,13 @@ bool scanFingerprintTwice() {
 
   if (finger.image2Tz(1) != FINGERPRINT_OK) {
     enrollStatus = "First image conversion failed";
+    Serial.println("[ENROLL ERROR] First image2Tz failed.");
     return false;
   }
 
   if (finger.fingerFastSearch() == FINGERPRINT_OK) {
     enrollStatus = "Fingerprint already registered";
+    Serial.println("[ENROLL ERROR] Fingerprint already exists in database.");
     return false;
   }
 
@@ -583,15 +662,18 @@ bool scanFingerprintTwice() {
 
   if (finger.image2Tz(2) != FINGERPRINT_OK) {
     enrollStatus = "Second image conversion failed";
+    Serial.println("[ENROLL ERROR] Second image2Tz failed.");
     return false;
   }
 
   if (finger.createModel() != FINGERPRINT_OK) {
     enrollStatus = "Fingerprints do not match";
+    Serial.println("[ENROLL ERROR] Fingerprints do not match.");
     return false;
   }
 
   fingerprintModelReady = true;
+  Serial.println("[ENROLL] Fingerprint scanned and matched successfully twice.");
   return true;
 }
 
@@ -616,7 +698,6 @@ void drawBackButton() {
 void drawHome() {
   tft.fillScreen(BG);
   drawHeader("KEY SYSTEM");
-
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(YELLOW, BG);
   tft.drawString("MAIN MENU", 160, 82, 2);
@@ -644,10 +725,8 @@ void drawKeyPage() {
   tft.fillScreen(BG);
   drawHeader("KEY STATUS");
   tft.setTextDatum(MC_DATUM);
-
   tft.setTextColor(TFT_GREEN, BG);
   tft.drawString("GREEN = ON HOOK", 160, 78, 2);
-
   tft.setTextColor(RED, BG);
   tft.drawString("RED = REMOVED", 160, 102, 2);
 
@@ -665,7 +744,6 @@ void drawKeyPage() {
     int row = i / 5;
     int cx = 35 + col * 63;
     int cy = 175 + row * 125;
-
     uint16_t color = keyPresent[i] ? TFT_GREEN : RED;
 
     tft.fillCircle(cx, cy, 22, color);
@@ -707,7 +785,7 @@ void drawKeyPage() {
 }
 
 // =====================================
-// CHECK FINGERPRINT SENSOR (WITH SECURITY CHECK)
+// CHECK FINGERPRINT SENSOR (BORROW / RETURN)
 // =====================================
 void checkFingerprintSensor() {
   if (!fingerprintReady) return;
@@ -721,6 +799,8 @@ void checkFingerprintSensor() {
   p = finger.fingerFastSearch();
   if (p == FINGERPRINT_OK) {
     uint16_t foundFingerID = finger.fingerID;
+    Serial.print("\n[SCANNER] Fingerprint matched! Found ID: ");
+    Serial.println(foundFingerID);
     
     String memberID = "";
     String memberName = "";
@@ -736,14 +816,17 @@ void checkFingerprintSensor() {
     }
 
     if (memberID == "" || targetSlot == -1) {
-      Serial.println("SECURITY ALERT: Unregistered or deleted fingerprint detected! Access Denied.");
+      Serial.println("[SECURITY ALERT] Unregistered or deleted fingerprint detected! Access Denied.");
       finger.deleteModel(foundFingerID);
-      
-      tone(BUZZER_PIN, 1000, 400);
-      delay(400);
-      noTone(BUZZER_PIN);
+      playTone(1000, 400);
       return; 
     }
+
+    Serial.print("[SCANNER] Welcome, ");
+    Serial.print(memberName);
+    Serial.print(" (ID: ");
+    Serial.print(memberID);
+    Serial.println(")");
 
     soundFingerSuccess();
 
@@ -784,6 +867,7 @@ void checkFingerprintSensor() {
       drawKeyPage();
     }
 
+    // 1. ส่งข้อมูลประวัติการยืม-คืนไปบันทึกแท็บ History
     DynamicJsonDocument doc(512);
     doc["action"] = "borrowReturn";
     doc["memberID"] = memberID;
@@ -794,6 +878,17 @@ void checkFingerprintSensor() {
     String payload;
     serializeJson(doc, payload);
     sendGoogleRequest(payload);
+
+    // 2. ส่งข้อมูลอัปเดตสถานะกุญแจไปที่แท็บ Keys ใน Google Sheets
+    DynamicJsonDocument docKey(512);
+    docKey["action"] = "updateKeyStatus";
+    docKey["keyID"] = keyID;
+    docKey["status"] = (eventName == "BORROW_KEY") ? "Borrowed" : "Available";
+    docKey["borrower"] = (eventName == "BORROW_KEY") ? memberName : "";
+
+    String payloadKey;
+    serializeJson(docKey, payloadKey);
+    sendGoogleRequest(payloadKey);
 
     delay(1000);
   }
@@ -999,14 +1094,17 @@ void openPage(Page page) {
 // SAVE & DELETE MEMBER ACTIONS
 // =====================================
 void saveMember() {
+  Serial.println("\n[UI ACTION] Save Member button pressed.");
   if (inputName.length() == 0 || inputPhone.length() == 0) {
     enrollStatus = "Enter name and phone first";
+    Serial.println("[ERROR] Name or phone is empty.");
     openPage(PAGE_ERROR);
     return;
   }
 
   if (!fingerprintReady) {
     enrollStatus = "AS608 not connected";
+    Serial.println("[ERROR] AS608 not connected.");
     openPage(PAGE_ERROR);
     return;
   }
@@ -1014,6 +1112,7 @@ void saveMember() {
   checkWiFiAutoReconnect();
   if (WiFi.status() != WL_CONNECTED) {
     enrollStatus = "WiFi not connected";
+    Serial.println("[ERROR] WiFi not connected.");
     openPage(PAGE_ERROR);
     return;
   }
@@ -1028,6 +1127,7 @@ void saveMember() {
 
   if (slot == -1) {
     enrollStatus = "All 10 slots are full";
+    Serial.println("[ERROR] All 10 slots are full.");
     openPage(PAGE_ERROR);
     return;
   }
@@ -1036,6 +1136,11 @@ void saveMember() {
   pendingMemberID = generateMemberID(slot);
   pendingMemberName = inputName;
   pendingMemberPhone = inputPhone;
+
+  Serial.print("[ADD] Assigned Slot: ");
+  Serial.print(slot);
+  Serial.print(" | MemberID: ");
+  Serial.println(pendingMemberID);
 
   if (!scanFingerprintTwice()) {
     pendingFingerID = 0;
@@ -1048,8 +1153,10 @@ void saveMember() {
 }
 
 void confirmAndSaveMember() {
+  Serial.println("\n[UI ACTION] Confirm & Save Member triggered.");
   if (!fingerprintModelReady || pendingFingerID == 0 || pendingMemberSlot < 0 || pendingMemberSlot >= MAX_KEYS) {
     enrollStatus = "Fingerprint data not ready";
+    Serial.println("[ERROR] Fingerprint data not ready for confirmation.");
     openPage(PAGE_ERROR);
     return;
   }
@@ -1065,39 +1172,30 @@ void confirmAndSaveMember() {
 
   if (finger.storeModel(pendingFingerID) != FINGERPRINT_OK) {
     enrollStatus = "Cannot store fingerprint";
+    Serial.println("[AS608 ERROR] Cannot store fingerprint model.");
     openPage(PAGE_ERROR);
     return;
   }
+  Serial.println("[AS608] Fingerprint stored successfully in sensor.");
 
-  WiFiClientSecure client;
-  client.setInsecure();
-  HTTPClient http;
-  
-  String url = String(GOOGLE_SCRIPT_URL) + "?action=addMember" +
-               "&memberID=" + pendingMemberID +
-               "&name=" + pendingMemberName +
-               "&phone=" + pendingMemberPhone +
-               "&fingerID=" + String(pendingFingerID) +
-               "&role=Member&status=Active";
-               
-  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  http.setTimeout(15000);
-  
-  bool success = false;
-  if (http.begin(client, url)) {
-    int httpCode = http.GET();
-    String resp = http.getString();
-    if (httpCode >= 200 && httpCode < 300) {
-      if (resp.indexOf("true") > 0 || resp.indexOf("success") > 0) {
-        success = true;
-      }
-    }
-    http.end();
-  }
+  DynamicJsonDocument doc(512);
+  doc["action"] = "addMember";
+  doc["memberID"] = pendingMemberID;
+  doc["name"] = pendingMemberName;
+  doc["phone"] = pendingMemberPhone;
+  doc["fingerID"] = String(pendingFingerID);
+  doc["role"] = "Member";
+  doc["status"] = "Active";
+
+  String payload;
+  serializeJson(doc, payload);
+
+  bool success = sendGoogleRequest(payload);
 
   if (!success) {
     finger.deleteModel(pendingFingerID);
     enrollStatus = "Google Sheets save failed";
+    Serial.println("[ERROR] Google Sheets addMember failed! Rolling back fingerprint model.");
     openPage(PAGE_ERROR);
     return;
   }
@@ -1117,53 +1215,61 @@ void confirmAndSaveMember() {
   logHistory(pendingMemberID, pendingMemberName, "", "ADD_MEMBER");
 
   fingerprintModelReady = false;
+  Serial.println("[SUCCESS] Member added successfully!");
   openPage(PAGE_SUCCESS);
 }
 
 void deleteMember(int index) {
-  if (index < 0 || index >= MAX_KEYS || !keyData[index].used) return;
+  Serial.println("\n[UI ACTION] Delete Member triggered.");
+  if (index < 0 || index >= MAX_KEYS || !keyData[index].used) {
+    Serial.println("[ERROR] Invalid index or slot not used.");
+    return;
+  }
 
   checkWiFiAutoReconnect();
   if (WiFi.status() != WL_CONNECTED) {
     enrollStatus = "WiFi not connected";
     showDeletePopup = false;
+    Serial.println("[ERROR] WiFi not connected during delete.");
     openPage(PAGE_ERROR);
     return;
   }
 
   String memberID = keyData[index].memberID;
   String memberName = keyData[index].name;
+  uint16_t fid = keyData[index].fingerID;
 
-  WiFiClientSecure client;
-  client.setInsecure();
-  HTTPClient http;
+  Serial.print("[DELETE] Deleting Member: ");
+  Serial.print(memberName);
+  Serial.print(" (ID: ");
+  Serial.print(memberID);
+  Serial.print(", FingerID: ");
+  Serial.print(fid);
+  Serial.println(")");
 
-  String url = String(GOOGLE_SCRIPT_URL) + "?action=deleteMember&memberID=" + memberID;
+  DynamicJsonDocument doc(256);
+  doc["action"] = "deleteMember";
+  doc["memberID"] = memberID;
 
-  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  http.setTimeout(15000);
+  String payload;
+  serializeJson(doc, payload);
 
-  bool success = false;
-  if (http.begin(client, url)) {
-    int httpCode = http.GET();
-    String resp = http.getString();
-    if (httpCode >= 200 && httpCode < 300) {
-      if (resp.indexOf("true") > 0 || resp.indexOf("success") > 0) {
-        success = true;
-      }
-    }
-    http.end();
-  }
+  bool success = sendGoogleRequest(payload);
 
   if (!success) {
     enrollStatus = "Google Sheets delete failed";
     showDeletePopup = false;
+    Serial.println("[ERROR] Google Sheets delete failed!");
     openPage(PAGE_ERROR);
     return;
   }
 
-  if (keyData[index].fingerID > 0 && fingerprintReady) {
-    finger.deleteModel(keyData[index].fingerID);
+  if (fid > 0 && fingerprintReady) {
+    if (finger.deleteModel(fid) == FINGERPRINT_OK) {
+      Serial.println("[AS608] Fingerprint model deleted from sensor.");
+    } else {
+      Serial.println("[AS608 WARNING] Failed to delete fingerprint model from sensor or not found.");
+    }
   }
 
   logHistory(memberID, memberName, "", "DELETE_MEMBER");
@@ -1176,6 +1282,7 @@ void deleteMember(int index) {
 
   saveMembersToFlash();
 
+  Serial.println("[SUCCESS] Member deleted successfully.");
   showDeletePopup = false;
   pendingRemove = -1;
   openPage(PAGE_REMOVE);
@@ -1288,7 +1395,7 @@ void setup() {
 
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
-  noTone(BUZZER_PIN);
+  initBuzzer();
 
   pinMode(MOTOR_IN1, OUTPUT);
   pinMode(MOTOR_IN2, OUTPUT);
