@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#101827">
-<title>SMART KEY BOX | Dashboard</title>
+<title>SMART KEY Cabinet | Dashboard</title>
 <style>
 :root{--bg:#0b1220;--panel:#111c2e;--panel2:#17243a;--line:#263650;--text:#eaf1fb;--muted:#91a2ba;--green:#35d39a;--blue:#62a8ff;--amber:#f6bd55;--red:#ff7272}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0%,#1a3150 0,transparent 32%),var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -23,7 +23,7 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="brand"><div class="logo">🔐</div><div><h1>SMART KEY BOX</h1><p>ระบบจัดการตู้กุญแจอัจฉริยะ · WEB DASHBOARD</p></div></div>
+    <div class="brand"><div class="logo">🔐</div><div><h1>SMART KEY Cabinet</h1><p>ระบบจัดการตู้กุญแจอัจฉริยะ · WEB DASHBOARD</p></div></div>
     <div class="actions"><button class="btn" id="pingBtn">ตรวจสอบ API</button><button class="btn primary" id="refreshBtn">↻ รีเฟรชข้อมูล</button></div>
   </header>
   <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">ยังไม่ได้เชื่อมต่อ Google Sheets API</span><span id="lastUpdate"></span></div>
@@ -55,7 +55,7 @@
 
   <section class="section panel" id="keysPanel" hidden>
     <div class="section-head"><div><h2>ทะเบียนกุญแจ</h2><span>Keys</span></div><div class="tools"><input class="search" id="keySearch" placeholder="ค้นหากุญแจ / ผู้ถือ"></div></div>
-    <div class="table-wrap"><table><thead><tr><th>รหัสกุญแจ</th><th>ชื่อกุญแจ</th><th>สถานะ</th><th>รหัสผู้ยืม</th><th>ชื่อผู้ยืม</th></tr></thead><tbody id="keysBody"></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>รหัสกุญแจ</th><th>ชื่อกุญแจ</th><th>สถานะ</th><th>ชื่อผู้ยืม</th></tr></thead><tbody id="keysBody"></tbody></table></div>
   </section>
 
   <section class="section panel" id="historyPanel" hidden>
@@ -169,7 +169,7 @@ function renderMembers(){
 function renderKeys(){
  const q=$('keySearch').value.toLowerCase();
  const rows=db.keys.filter(k=>JSON.stringify(k).toLowerCase().includes(q));
- $('keysBody').innerHTML=rows.length?rows.map(k=>`<tr><td>${cell(pick(k,['KeyID','keyId']))}</td><td>${cell(pick(k,['KeyName','keyName']))}</td><td>${pill(pick(k,['Status','status']))}</td><td>${cell(pick(k,['BorrowerID','borrowerId']))}</td><td>${cell(pick(k,['BorrowerName','borrowerName']))}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">ไม่พบข้อมูลกุญแจ</td></tr>';
+ $('keysBody').innerHTML=rows.length?rows.map(k=>`<tr><td>${cell(pick(k,['KeyID','keyId']))}</td><td>${cell(pick(k,['KeyName','keyName']))}</td><td>${pill(pick(k,['Status','status']))}</td><td>${cell(pick(k,['BorrowerName','borrowerName']))}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">ไม่พบข้อมูลกุญแจ</td></tr>';
 }
 function renderHistory(){
  const q=$('historySearch').value.toLowerCase();
