@@ -110,9 +110,10 @@ const float F = 507.442665;
 #define CYAN     0x07FF
 
 // =====================================
-// SYSTEM SETTINGS
+// SYSTEM SETTINGS (แยกกุญแจ และ สมาชิก)
 // =====================================
 #define MAX_KEYS 10
+#define MAX_MEMBERS 35
 
 struct KeyRecord {
   bool used;
@@ -122,8 +123,8 @@ struct KeyRecord {
   uint16_t fingerID;
 };
 
-KeyRecord keyData[MAX_KEYS];
-String currentBorrowerName[MAX_KEYS];
+KeyRecord keyData[MAX_MEMBERS]; // รองรับสมาชิกสูงสุด 35 คน
+String currentBorrowerName[MAX_KEYS]; // สถานะกุญแจ 10 ดอก
 
 // =====================================
 // PAGE CONTROL
@@ -154,10 +155,11 @@ enum InputField {
 InputField selectedField = FIELD_NAME;
 
 // =====================================
-// REMOVE POPUP
+// REMOVE POPUP & PAGINATION
 // =====================================
 bool showDeletePopup = false;
 int pendingRemove = -1;
+int removePage = 0; // สำหรับเลื่อนหน้าจอหน้ารายชื่อสมาชิก (0 - 4)
 
 // =====================================
 // KEYBOARD
@@ -332,12 +334,12 @@ bool logHistory(String memberID, String name, String keyID, String eventName) {
 }
 
 // =====================================
-// SAVE & LOAD MEMBERS TO FLASH
+// SAVE & LOAD MEMBERS TO FLASH (35 คน)
 // =====================================
 void saveMembersToFlash() {
   Preferences prefs;
   prefs.begin("members", false);
-  for (int i = 0; i < MAX_KEYS; i++) {
+  for (int i = 0; i < MAX_MEMBERS; i++) {
     String keyPrefix = "m" + String(i) + "_";
     prefs.putBool((keyPrefix + "used").c_str(), keyData[i].used);
     if (keyData[i].used) {
@@ -353,7 +355,7 @@ void saveMembersToFlash() {
 void loadMembersFromFlash() {
   Preferences prefs;
   prefs.begin("members", true);
-  for (int i = 0; i < MAX_KEYS; i++) {
+  for (int i = 0; i < MAX_MEMBERS; i++) {
     String keyPrefix = "m" + String(i) + "_";
     keyData[i].used = prefs.getBool((keyPrefix + "used").c_str(), false);
     if (keyData[i].used) {
@@ -421,11 +423,9 @@ void motorCloseRight() {
 void showBootIntro() {
   tft.fillScreen(BLACK);
 
-  // วาดกรอบสไตล์โมเดิร์นไฮเทค (Cyber/Digital Theme)
   tft.drawRect(10, 10, 300, 460, CYAN);
   tft.drawRect(14, 14, 292, 452, HEADER);
 
-  // วาดเส้นตารางตกแต่งมุม (Corner accents)
   tft.drawFastHLine(10, 50, 20, CYAN);
   tft.drawFastVLine(50, 10, 20, CYAN);
   tft.drawFastHLine(290, 50, 20, CYAN);
@@ -436,7 +436,6 @@ void showBootIntro() {
   tft.drawFastHLine(290, 430, 20, CYAN);
   tft.drawFastVLine(270, 450, 20, CYAN);
 
-  // หัวข้อหลัก: SMART KEY CABINET
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(CYAN, HEADER);
   tft.drawString("SMART KEY", 160, 110, 4);
@@ -444,30 +443,25 @@ void showBootIntro() {
   tft.setTextColor(YELLOW, HEADER);
   tft.drawString("CABINET", 160, 145, 4);
 
-  // ข้อมูลวิทยาลัย (Digital Business Technology Style)
   tft.setTextColor(WHITE, HEADER);
   tft.drawString("INTERPATTANASAT", 160, 200, 2);
   tft.setTextColor(TFT_LIGHTGREY, HEADER);
   tft.drawString("Technological College", 160, 225, 1);
 
-  // แถบโหลดสถานะระบบ (Loading Progress Bar Modern)
   tft.setTextColor(GREEN, HEADER);
   tft.drawString("INITIALIZING SYSTEM...", 160, 290, 1);
 
   tft.drawRect(40, 320, 240, 16, WHITE);
   
-  // เสียงเปิดเครื่องแบบล้ำๆ
   playTone(1500, 80);
   delay(100);
   playTone(2200, 120);
 
-  // วิ่งแถบโหลดอนิเมชัน
   for (int i = 0; i < 22; i++) {
     tft.fillRoundRect(43 + (i * 10), 323, 8, 10, 2, CYAN);
-    delay(120); // หน่วงเวลาให้ดูสมูทและเท่
+    delay(120);
   }
 
-  // แฟลชหน้าจอเล็กน้อยแสดงความพร้อม
   tft.fillScreen(CYAN);
   delay(100);
   tft.fillScreen(BLACK);
@@ -477,8 +471,6 @@ void showBootIntro() {
 // =====================================
 // COUNTDOWN POPUP SCREENS
 // =====================================
-
-// หน้าจอตอนประตูเปิด (นับถอยหลัง 7 วินาที)[cite: 2]
 void drawOpeningCountdownPopup() {
   for (int sec = 7; sec > 0; sec--) {
     tft.fillRoundRect(30, 140, 260, 200, 12, HEADER);
@@ -502,7 +494,7 @@ void drawOpeningCountdownPopup() {
 }
 
 void runDoorCycle() {
-  digitalWrite(LED_RELAY_PIN, LOW); // เปิดไฟ LED 12V[cite: 2]
+  digitalWrite(LED_RELAY_PIN, LOW); // เปิดไฟ LED 12V
   motorOpenLeft();
   unsigned long startTime = millis();
   while (digitalRead(LIMIT_LEFT_PIN) == HIGH) {
@@ -511,7 +503,7 @@ void runDoorCycle() {
   }
   
   motorBrake(100);
-  drawOpeningCountdownPopup(); // แสดงหน้าจอตอนประตูเปิด[cite: 2]
+  drawOpeningCountdownPopup();
 
   motorCloseRight();
   startTime = millis();
@@ -521,7 +513,7 @@ void runDoorCycle() {
   }
   
   motorBrake(300);
-  digitalWrite(LED_RELAY_PIN, HIGH); // ปิดไฟ LED 12V[cite: 2]
+  digitalWrite(LED_RELAY_PIN, HIGH); // ปิดไฟ LED 12V
 }
 
 // =====================================
@@ -726,7 +718,8 @@ void checkFingerprintSensor() {
     String memberName = "";
     int targetSlot = -1;
 
-    for (int i = 0; i < MAX_KEYS; i++) {
+    // ค้นหาสมาชิกจากฐานข้อมูล 35 คน
+    for (int i = 0; i < MAX_MEMBERS; i++) {
       if (keyData[i].used && keyData[i].fingerID == foundFingerID) {
         memberID = keyData[i].memberID;
         memberName = keyData[i].name;
@@ -751,7 +744,6 @@ void checkFingerprintSensor() {
       }
     }
 
-    // 1. สั่งเปิด-ปิดประตู พร้อมหน้าจอตอนประตูเปิด
     runDoorCycle();
 
     if (mcpReady) {
@@ -759,23 +751,22 @@ void checkFingerprintSensor() {
     }
 
     String eventName = "";
-    targetSlot = -1;
+    int keyTargetSlot = -1;
     for (int i = 0; i < MAX_KEYS; i++) {
       if (initialKeyStatus[i] == true && keyPresent[i] == false) {
-        targetSlot = i;
+        keyTargetSlot = i;
         eventName = "BORROW_KEY";
         currentBorrowerName[i] = memberName;
         break;
       } else if (initialKeyStatus[i] == false && keyPresent[i] == true) {
-        targetSlot = i;
+        keyTargetSlot = i;
         eventName = "RETURN_KEY";
         currentBorrowerName[i] = "";
         break;
       }
     }
 
-    // ป้องกันกรณีสแกนนิ้วแล้วไม่ได้หยิบ/คืนกุญแจใดๆ (ไม่มีการเปลี่ยนแปลงสถานะ)
-    if (targetSlot == -1 || eventName == "") {
+    if (keyTargetSlot == -1 || eventName == "") {
       Serial.println("[INFO] No key change detected. Skipping Google Sheets update.");
       
       tft.fillRoundRect(30, 140, 260, 200, 12, HEADER);
@@ -795,13 +786,9 @@ void checkFingerprintSensor() {
     }
 
     char buf[10];
-    sprintf(buf, "KEY-%02d", targetSlot + 1);
+    sprintf(buf, "KEY-%02d", keyTargetSlot + 1);
     String keyID = String(buf);
 
-    // =========================================================
-    // 2. เด้งหน้าจอ Pop-up "PLEASE WAIT" ทันทีแบบไร้รอยต่อหลังประตูปิดสนิท
-    // เพื่อบล็อกคนต่อแถวไม่ให้สแกนซ้ำในระหว่างอัปเดตข้อมูล
-    // =========================================================
     tft.fillRoundRect(30, 140, 260, 200, 12, HEADER);
     tft.drawRoundRect(30, 140, 260, 200, 12, YELLOW);
     tft.setTextDatum(MC_DATUM);
@@ -813,7 +800,6 @@ void checkFingerprintSensor() {
     tft.setTextColor(GREEN, HEADER);
     tft.drawString("Processing...", 160, 285, 2);
 
-    // 3. ส่งข้อมูลประวัติและสถานะกุญแจไปที่ Google Sheets ในขณะที่ Pop-up โชว์อยู่
     DynamicJsonDocument doc(512);
     doc["action"] = "borrowReturn";
     doc["memberID"] = memberID;
@@ -833,10 +819,8 @@ void checkFingerprintSensor() {
     serializeJson(docKey, payloadKey);
     sendGoogleRequest(payloadKey);
 
-    // 4. หน่วงเวลารอ Dashboard อัปเดตและหน้าจอกระพริบจนนิ่งสนิท (5 วินาที)
     delay(5000); 
 
-    // 5. อัปเดตหน้าจอหลักของ Key Page ให้กลับมาเป็นสถานะล่าสุด
     if (currentPage == PAGE_KEY) {
       drawKeyPage();
     }
@@ -844,7 +828,7 @@ void checkFingerprintSensor() {
 }
 
 // =====================================
-// FORM AND PAGE CONTROL (ส่วนอื่นๆ เหมือนเดิม)
+// FORM AND PAGE CONTROL
 // =====================================
 void drawInputField(int y, const char* label, String value, bool selected) {
   tft.setTextDatum(TL_DATUM);
@@ -898,23 +882,71 @@ void drawTrashIcon(int x, int y) {
   tft.drawLine(x + 4, y - 3, x + 4, y + 9, WHITE);
 }
 
+// =====================================
+// REMOVE PAGE WITH PAGINATION (รองรับ 35 คน เลื่อนดูได้)
+// =====================================
+#define MEMBERS_PER_PAGE 7
+
 void drawRemovePage() {
   tft.fillScreen(BG);
   drawHeader("REMOVE MEMBER");
-  int rowY = 68;
-  for (int i = 0; i < MAX_KEYS; i++) {
-    if (!keyData[i].used) continue;
-    tft.fillRoundRect(10, rowY, 300, 32, 5, HEADER);
+
+  // แสดงหมายเลขหน้าปัจจุบัน (เช่น Page 1 / 5)
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(CYAN, BG);
+  char pageBuf[20];
+  sprintf(pageBuf, "Page %d / %d", removePage + 1, (MAX_MEMBERS + MEMBERS_PER_PAGE - 1) / MEMBERS_PER_PAGE);
+  tft.drawString(pageBuf, 160, 62, 2);
+
+  int startIdx = removePage * MEMBERS_PER_PAGE;
+  int endIdx = startIdx + MEMBERS_PER_PAGE;
+  if (endIdx > MAX_MEMBERS) endIdx = MAX_MEMBERS;
+
+  int rowY = 80;
+  for (int i = startIdx; i < endIdx; i++) {
+    // แสดงลำดับที่ 01 ถึง 35
     tft.setTextDatum(TL_DATUM);
-    tft.setTextColor(WHITE, HEADER);
-    String label = keyData[i].name;
-    if (label.length() > 15) label = label.substring(0, 15);
-    tft.drawString(label, 18, rowY + 8, 2);
-    tft.fillRoundRect(267, rowY + 2, 38, 28, 5, RED);
-    drawTrashIcon(286, rowY + 16);
+    tft.setTextColor(WHITE, BG);
+    char idxBuf[10];
+    sprintf(idxBuf, "%02d.", i + 1);
+    tft.drawString(idxBuf, 10, rowY + 8, 2);
+
+    if (keyData[i].used) {
+      tft.fillRoundRect(35, rowY, 230, 30, 5, HEADER);
+      tft.setTextColor(WHITE, HEADER);
+      String label = keyData[i].name;
+      if (label.length() > 14) label = label.substring(0, 14);
+      tft.drawString(label, 45, rowY + 7, 2);
+
+      tft.fillRoundRect(270, rowY, 40, 30, 5, RED);
+      drawTrashIcon(290, rowY + 15);
+    } else {
+      tft.fillRoundRect(35, rowY, 275, 30, 5, 0x2104);
+      tft.setTextColor(GRAY, 0x2104);
+      tft.drawString("- Empty Slot -", 50, rowY + 7, 2);
+    }
     rowY += 36;
   }
-  drawBackButton();
+
+  // ปุ่มควบคุมด้านล่าง: < BACK | < PREV | NEXT >
+  tft.fillRoundRect(10, 428, 90, 40, 8, GRAY);
+  tft.drawRoundRect(10, 428, 90, 40, 8, WHITE);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(WHITE, GRAY);
+  tft.drawString("< BACK", 55, 448, 2);
+
+  uint16_t prevColor = (removePage > 0) ? BLUE : GRAY;
+  tft.fillRoundRect(105, 428, 100, 40, 8, prevColor);
+  tft.drawRoundRect(105, 428, 100, 40, 8, WHITE);
+  tft.setTextColor(WHITE, prevColor);
+  tft.drawString("< PREV", 155, 448, 2);
+
+  int maxPages = (MAX_MEMBERS + MEMBERS_PER_PAGE - 1) / MEMBERS_PER_PAGE;
+  uint16_t nextColor = (removePage < maxPages - 1) ? BLUE : GRAY;
+  tft.fillRoundRect(210, 428, 100, 40, 8, nextColor);
+  tft.drawRoundRect(210, 428, 100, 40, 8, WHITE);
+  tft.setTextColor(WHITE, nextColor);
+  tft.drawString("NEXT >", 260, 448, 2);
 }
 
 void drawDeletePopup() {
@@ -925,7 +957,7 @@ void drawDeletePopup() {
   tft.setTextColor(YELLOW, HEADER);
   tft.drawString("CONFIRM DELETE?", 160, 195, 2);
   tft.setTextColor(WHITE, HEADER);
-  String name = (pendingRemove >= 0 && pendingRemove < MAX_KEYS) ? keyData[pendingRemove].name : "";
+  String name = (pendingRemove >= 0 && pendingRemove < MAX_MEMBERS) ? keyData[pendingRemove].name : "";
   tft.drawString(name, 160, 225, 2);
   tft.fillRoundRect(42, 260, 105, 40, 7, GRAY);
   tft.setTextColor(WHITE, GRAY);
@@ -1009,7 +1041,7 @@ void openPage(Page page) {
       drawAddPage();
       break;
     case PAGE_REMOVE:
-      showDeletePopup = false; pendingRemove = -1;
+      showDeletePopup = false; pendingRemove = -1; removePage = 0;
       drawRemovePage();
       break;
     case PAGE_ENROLL: drawEnrollPage(); break;
@@ -1036,11 +1068,11 @@ void saveMember() {
     return;
   }
   int slot = -1;
-  for (int i = 0; i < MAX_KEYS; i++) {
+  for (int i = 0; i < MAX_MEMBERS; i++) {
     if (!keyData[i].used) { slot = i; break; }
   }
   if (slot == -1) {
-    enrollStatus = "All 10 slots are full";
+    enrollStatus = "All 35 slots are full";
     openPage(PAGE_ERROR);
     return;
   }
@@ -1059,7 +1091,7 @@ void saveMember() {
 }
 
 void confirmAndSaveMember() {
-  if (!fingerprintModelReady || pendingFingerID == 0 || pendingMemberSlot < 0 || pendingMemberSlot >= MAX_KEYS) {
+  if (!fingerprintModelReady || pendingFingerID == 0 || pendingMemberSlot < 0 || pendingMemberSlot >= MAX_MEMBERS) {
     enrollStatus = "Fingerprint data not ready";
     openPage(PAGE_ERROR);
     return;
@@ -1108,7 +1140,7 @@ void confirmAndSaveMember() {
 }
 
 void deleteMember(int index) {
-  if (index < 0 || index >= MAX_KEYS || !keyData[index].used) return;
+  if (index < 0 || index >= MAX_MEMBERS || !keyData[index].used) return;
   checkWiFiAutoReconnect();
   if (WiFi.status() != WL_CONNECTED) {
     enrollStatus = "WiFi not connected";
@@ -1198,15 +1230,40 @@ void handleRemoveTouch(int x, int y) {
     if (y >= 260 && y <= 300 && x >= 172 && x <= 277) { deleteMember(pendingRemove); return; }
     return;
   }
-  if (y >= 428 && y <= 468 && x >= 10 && x <= 110) { openPage(PAGE_HOME); return; }
-  int rowY = 68;
-  for (int i = 0; i < MAX_KEYS; i++) {
-    if (!keyData[i].used) continue;
-    if (y >= rowY && y <= rowY + 32 && x >= 267 && x <= 305) {
-      pendingRemove = i;
-      showDeletePopup = true;
-      drawDeletePopup();
-      return;
+  // ปุ่ม < BACK
+  if (y >= 428 && y <= 468 && x >= 10 && x <= 100) { openPage(PAGE_HOME); return; }
+  // ปุ่ม < PREV
+  if (y >= 428 && y <= 468 && x >= 105 && x <= 205) {
+    if (removePage > 0) {
+      removePage--;
+      drawRemovePage();
+    }
+    return;
+  }
+  // ปุ่ม NEXT >
+  if (y >= 428 && y <= 468 && x >= 210 && x <= 310) {
+    int maxPages = (MAX_MEMBERS + MEMBERS_PER_PAGE - 1) / MEMBERS_PER_PAGE;
+    if (removePage < maxPages - 1) {
+      removePage++;
+      drawRemovePage();
+    }
+    return;
+  }
+
+  // ตรวจสอบการกดปุ่มถังขยะในหน้านั้นๆ
+  int startIdx = removePage * MEMBERS_PER_PAGE;
+  int endIdx = startIdx + MEMBERS_PER_PAGE;
+  if (endIdx > MAX_MEMBERS) endIdx = MAX_MEMBERS;
+
+  int rowY = 80;
+  for (int i = startIdx; i < endIdx; i++) {
+    if (keyData[i].used) {
+      if (y >= rowY && y <= rowY + 30 && x >= 270 && x <= 310) {
+        pendingRemove = i;
+        showDeletePopup = true;
+        drawDeletePopup();
+        return;
+      }
     }
     rowY += 36;
   }
@@ -1258,9 +1315,6 @@ void setup() {
   touch.begin();
   touch.setRotation(0);
 
-  // =========================================================
-  // แสดงหน้าจอ Intro กราฟิก Modern Digital เปิดเครื่อง
-  // =========================================================
   showBootIntro();
 
   mcpReady = initializeMCP23017();
