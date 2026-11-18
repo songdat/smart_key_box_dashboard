@@ -19,7 +19,7 @@ const char* WIFI_SSID = "IPS-Library_2.4G";
 const char* WIFI_PASSWORD = "042515888";
 
 const char* GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbxDRWRKT7ZTsYqJC8ysXZgy7qADFCDZidnacem6X1rO4_NuAqYeaTHvyNcpo-6InsAqRw/exec";
+  "https://script.google.com/macros/s/AKfycbxV1WgR5QfU5cBwd6IqPnBv6TsoA8j7u5nVCQJ5ZxwtDop3NjMfCkh0zVuct5Ncq7qDmA/exec";
 
 bool wifiReady = false;
 bool googleSheetsReady = false;
@@ -110,7 +110,7 @@ const float F = 507.442665;
 #define CYAN     0x07FF
 
 // =====================================
-// SYSTEM SETTINGS (แยกกุญแจ และ สมาชิก)
+// SYSTEM SETTINGS
 // =====================================
 #define MAX_KEYS 10
 #define MAX_MEMBERS 35
@@ -123,8 +123,8 @@ struct KeyRecord {
   uint16_t fingerID;
 };
 
-KeyRecord keyData[MAX_MEMBERS]; // รองรับสมาชิกสูงสุด 35 คน
-String currentBorrowerName[MAX_KEYS]; // สถานะกุญแจ 10 ดอก
+KeyRecord keyData[MAX_MEMBERS]; 
+String currentBorrowerName[MAX_KEYS]; 
 
 // =====================================
 // PAGE CONTROL
@@ -132,6 +132,7 @@ String currentBorrowerName[MAX_KEYS]; // สถานะกุญแจ 10 ด�
 enum Page {
   PAGE_HOME,
   PAGE_KEY,
+  PAGE_PASSWORD, // หน้าจอใส่รหัสผ่านก่อนเข้า ADD
   PAGE_ADD,
   PAGE_REMOVE,
   PAGE_ENROLL,
@@ -142,10 +143,12 @@ enum Page {
 Page currentPage = PAGE_HOME;
 
 // =====================================
-// ADD FORM
+// ADD FORM & PASSWORD FORM
 // =====================================
 String inputName = "";
 String inputPhone = "";
+String adminPasswordInput = ""; // ตัวเก็บรหัสผ่านที่พิมพ์
+const String CORRECT_ADMIN_PWD = "IPS1234"; // รหัสผ่าน 6 หลักที่คุณกำหนด
 
 enum InputField {
   FIELD_NAME,
@@ -159,7 +162,7 @@ InputField selectedField = FIELD_NAME;
 // =====================================
 bool showDeletePopup = false;
 int pendingRemove = -1;
-int removePage = 0; // สำหรับเลื่อนหน้าจอหน้ารายชื่อสมาชิก (0 - 4)
+int removePage = 0; 
 
 // =====================================
 // KEYBOARD
@@ -334,7 +337,7 @@ bool logHistory(String memberID, String name, String keyID, String eventName) {
 }
 
 // =====================================
-// SAVE & LOAD MEMBERS TO FLASH (35 คน)
+// SAVE & LOAD MEMBERS TO FLASH
 // =====================================
 void saveMembersToFlash() {
   Preferences prefs;
@@ -494,7 +497,7 @@ void drawOpeningCountdownPopup() {
 }
 
 void runDoorCycle() {
-  digitalWrite(LED_RELAY_PIN, LOW); // เปิดไฟ LED 12V
+  digitalWrite(LED_RELAY_PIN, LOW); 
   motorOpenLeft();
   unsigned long startTime = millis();
   while (digitalRead(LIMIT_LEFT_PIN) == HIGH) {
@@ -513,7 +516,7 @@ void runDoorCycle() {
   }
   
   motorBrake(300);
-  digitalWrite(LED_RELAY_PIN, HIGH); // ปิดไฟ LED 12V
+  digitalWrite(LED_RELAY_PIN, HIGH); 
 }
 
 // =====================================
@@ -718,7 +721,6 @@ void checkFingerprintSensor() {
     String memberName = "";
     int targetSlot = -1;
 
-    // ค้นหาสมาชิกจากฐานข้อมูล 35 คน
     for (int i = 0; i < MAX_MEMBERS; i++) {
       if (keyData[i].used && keyData[i].fingerID == foundFingerID) {
         memberID = keyData[i].memberID;
@@ -842,6 +844,62 @@ void drawInputField(int y, const char* label, String value, bool selected) {
   tft.drawString(displayText, 18, y + 10, 2);
 }
 
+// =====================================
+// หน้าจอใส่รหัสผ่านก่อนเข้า ADD (PAGE_PASSWORD)
+// =====================================
+void drawPasswordPage() {
+  tft.fillScreen(BG);
+  drawHeader("ADMIN SECURITY");
+  
+  // ช่องกรอกรหัสผ่าน 1 บรรทัด
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(YELLOW, BG);
+  tft.drawString("ENTER 6-DIGIT ADMIN PASSWORD:", 12, 100, 2);
+  
+  tft.fillRoundRect(10, 130, 300, 42, 6, HEADER);
+  tft.drawRoundRect(10, 130, 300, 42, 6, YELLOW);
+  
+  tft.setTextColor(WHITE, HEADER);
+  String displayPwd = "";
+  for (int i = 0; i < adminPasswordInput.length(); i++) {
+    displayPwd += "*"; // ซ่อนรหัสผ่านเป็นดอกจันเพื่อความปลอดภัย
+  }
+  if (displayPwd.length() == 0) displayPwd = "_";
+  tft.drawString(displayPwd, 18, 142, 2);
+
+  // แผงคีย์บอร์ดตัวอักษร/ตัวเลขชุดเดิม
+  for (int row = 0; row < 6; row++) {
+    for (int col = 0; col < 6; col++) {
+      int x = KEY_X + col * (KEY_W + KEY_GAP);
+      int y = KEY_Y + row * (KEY_H + 3);
+      tft.fillRoundRect(x, y, KEY_W, KEY_H, 5, HEADER);
+      tft.drawRoundRect(x, y, KEY_W, KEY_H, 5, WHITE);
+      char letter[2] = { keyboardRows[row][col], '\0' };
+      tft.setTextDatum(MC_DATUM);
+      tft.setTextColor(WHITE, HEADER);
+      tft.drawString(letter, x + KEY_W / 2, y + KEY_H / 2, 2);
+    }
+  }
+
+  // ปุ่มควบคุมล่างแผงคีย์บอร์ด
+  tft.fillRoundRect(10, 382, 185, 32, 5, BLUE);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(WHITE, BLUE);
+  tft.drawString("CLEAR", 102, 398, 2);
+  
+  tft.fillRoundRect(205, 382, 105, 32, 5, RED);
+  tft.setTextColor(WHITE, RED);
+  tft.drawString("DEL", 257, 398, 2);
+  
+  tft.fillRoundRect(10, 426, 140, 43, 8, GRAY);
+  tft.setTextColor(WHITE, GRAY);
+  tft.drawString("CANCEL", 80, 447, 2);
+  
+  tft.fillRoundRect(170, 426, 140, 43, 8, GREEN);
+  tft.setTextColor(WHITE, GREEN);
+  tft.drawString("ENTER", 240, 447, 2);
+}
+
 void drawAddPage() {
   tft.fillScreen(BG);
   drawHeader("ADD MEMBER");
@@ -882,16 +940,12 @@ void drawTrashIcon(int x, int y) {
   tft.drawLine(x + 4, y - 3, x + 4, y + 9, WHITE);
 }
 
-// =====================================
-// REMOVE PAGE WITH PAGINATION (รองรับ 35 คน เลื่อนดูได้)
-// =====================================
 #define MEMBERS_PER_PAGE 7
 
 void drawRemovePage() {
   tft.fillScreen(BG);
   drawHeader("REMOVE MEMBER");
 
-  // แสดงหมายเลขหน้าปัจจุบัน (เช่น Page 1 / 5)
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(CYAN, BG);
   char pageBuf[20];
@@ -904,7 +958,6 @@ void drawRemovePage() {
 
   int rowY = 80;
   for (int i = startIdx; i < endIdx; i++) {
-    // แสดงลำดับที่ 01 ถึง 35
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(WHITE, BG);
     char idxBuf[10];
@@ -928,7 +981,6 @@ void drawRemovePage() {
     rowY += 36;
   }
 
-  // ปุ่มควบคุมด้านล่าง: < BACK | < PREV | NEXT >
   tft.fillRoundRect(10, 428, 90, 40, 8, GRAY);
   tft.drawRoundRect(10, 428, 90, 40, 8, WHITE);
   tft.setTextDatum(MC_DATUM);
@@ -1036,6 +1088,10 @@ void openPage(Page page) {
   switch (page) {
     case PAGE_HOME: drawHome(); break;
     case PAGE_KEY: drawKeyPage(); break;
+    case PAGE_PASSWORD:
+      adminPasswordInput = ""; // ล้างรหัสผ่านเก่าเมื่อเปิดหน้าใส่รหัส
+      drawPasswordPage();
+      break;
     case PAGE_ADD:
       inputName = ""; inputPhone = ""; selectedField = FIELD_NAME;
       drawAddPage();
@@ -1079,7 +1135,7 @@ void saveMember() {
   pendingMemberSlot = slot;
   pendingMemberID = generateMemberID(slot);
   pendingMemberName = inputName;
-  pendingMemberPhone = inputPhone;
+  pendingMemberPhone = "'" + inputPhone;
 
   if (!scanFingerprintTwice()) {
     pendingFingerID = 0;
@@ -1180,29 +1236,79 @@ void deleteMember(int index) {
 }
 
 void addCharacter(char c) {
-  if (selectedField == FIELD_NAME) {
-    if (inputName.length() < 12) inputName += c;
-  } else {
-    if (c >= '0' && c <= '9') {
-      if (inputPhone.length() < 15) inputPhone += c;
+  if (currentPage == PAGE_PASSWORD) {
+    if (adminPasswordInput.length() < 10) adminPasswordInput += c;
+    drawPasswordPage();
+  } else if (currentPage == PAGE_ADD) {
+    if (selectedField == FIELD_NAME) {
+      if (inputName.length() < 12) inputName += c;
+    } else {
+      if (c >= '0' && c <= '9') {
+        if (inputPhone.length() < 15) inputPhone += c;
+      }
     }
+    drawAddPage();
   }
-  drawAddPage();
 }
 
 void deleteCharacter() {
-  if (selectedField == FIELD_NAME) {
-    if (inputName.length() > 0) inputName.remove(inputName.length() - 1);
-  } else {
-    if (inputPhone.length() > 0) inputPhone.remove(inputPhone.length() - 1);
+  if (currentPage == PAGE_PASSWORD) {
+    if (adminPasswordInput.length() > 0) adminPasswordInput.remove(adminPasswordInput.length() - 1);
+    drawPasswordPage();
+  } else if (currentPage == PAGE_ADD) {
+    if (selectedField == FIELD_NAME) {
+      if (inputName.length() > 0) inputName.remove(inputName.length() - 1);
+    } else {
+      if (inputPhone.length() > 0) inputPhone.remove(inputPhone.length() - 1);
+    }
+    drawAddPage();
   }
-  drawAddPage();
 }
 
 void handleHomeTouch(int x, int y) {
   if (y >= 115 && y <= 200) openPage(PAGE_KEY);
-  else if (y >= 220 && y <= 305) openPage(PAGE_ADD);
+  else if (y >= 220 && y <= 305) openPage(PAGE_PASSWORD); // กดปุ่ม + ADD จะเด้งไปหน้าใส่รหัสผ่านก่อน
   else if (y >= 325 && y <= 410) openPage(PAGE_REMOVE);
+}
+
+// การจัดการการกดปุ่มในหน้าจอใส่รหัสผ่าน
+void handlePasswordTouch(int x, int y) {
+  if (y >= KEY_Y && y < KEY_Y + 6 * (KEY_H + 3)) {
+    int row = (y - KEY_Y) / (KEY_H + 3);
+    int col = (x - KEY_X) / (KEY_W + KEY_GAP);
+    if (row >= 0 && row < 6 && col >= 0 && col < 6) {
+      if ((x - KEY_X) % (KEY_W + KEY_GAP) < KEY_W) {
+        addCharacter(keyboardRows[row][col]);
+      }
+    }
+    return;
+  }
+  // ปุ่ม CLEAR
+  if (y >= 382 && y <= 414 && x >= 10 && x <= 195) { 
+    adminPasswordInput = ""; 
+    drawPasswordPage(); 
+    return; 
+  }
+  // ปุ่ม DEL
+  if (y >= 382 && y <= 414 && x >= 205 && x <= 310) { 
+    deleteCharacter(); 
+    return; 
+  }
+  // ปุ่ม CANCEL (กลับหน้าหลัก)
+  if (y >= 426 && y <= 469 && x >= 10 && x <= 150) { 
+    openPage(PAGE_HOME); 
+    return; 
+  }
+  // ปุ่ม ENTER (ตรวจสอบรหัสผ่าน)
+  if (y >= 426 && y <= 469 && x >= 170 && x <= 310) { 
+    if (adminPasswordInput == CORRECT_ADMIN_PWD) {
+      openPage(PAGE_ADD); // รหัสถูกต้อง เข้าสู่หน้าเพิ่มสมาชิกจริง
+    } else {
+      enrollStatus = "Invalid Password!";
+      openPage(PAGE_ERROR); // รหัสผิด แสดงหน้า Error
+    }
+    return; 
+  }
 }
 
 void handleAddTouch(int x, int y) {
@@ -1230,9 +1336,7 @@ void handleRemoveTouch(int x, int y) {
     if (y >= 260 && y <= 300 && x >= 172 && x <= 277) { deleteMember(pendingRemove); return; }
     return;
   }
-  // ปุ่ม < BACK
   if (y >= 428 && y <= 468 && x >= 10 && x <= 100) { openPage(PAGE_HOME); return; }
-  // ปุ่ม < PREV
   if (y >= 428 && y <= 468 && x >= 105 && x <= 205) {
     if (removePage > 0) {
       removePage--;
@@ -1240,7 +1344,6 @@ void handleRemoveTouch(int x, int y) {
     }
     return;
   }
-  // ปุ่ม NEXT >
   if (y >= 428 && y <= 468 && x >= 210 && x <= 310) {
     int maxPages = (MAX_MEMBERS + MEMBERS_PER_PAGE - 1) / MEMBERS_PER_PAGE;
     if (removePage < maxPages - 1) {
@@ -1250,7 +1353,6 @@ void handleRemoveTouch(int x, int y) {
     return;
   }
 
-  // ตรวจสอบการกดปุ่มถังขยะในหน้านั้นๆ
   int startIdx = removePage * MEMBERS_PER_PAGE;
   int endIdx = startIdx + MEMBERS_PER_PAGE;
   if (endIdx > MAX_MEMBERS) endIdx = MAX_MEMBERS;
@@ -1273,13 +1375,14 @@ void handleTouch(int x, int y) {
   switch (currentPage) {
     case PAGE_HOME: handleHomeTouch(x, y); break;
     case PAGE_KEY: if (y >= 428 && y <= 468 && x >= 10 && x <= 110) openPage(PAGE_HOME); break;
+    case PAGE_PASSWORD: handlePasswordTouch(x, y); break;
     case PAGE_ADD: handleAddTouch(x, y); break;
     case PAGE_REMOVE: handleRemoveTouch(x, y); break;
     case PAGE_ENROLL:
       if (y >= 340 && y <= 395 && x >= 15 && x <= 150) {
         pendingFingerID = 0; pendingMemberSlot = -1; fingerprintModelReady = false;
         pendingMemberID = ""; pendingMemberName = ""; pendingMemberPhone = "";
-        openPage(PAGE_ADD);
+        openPage(PAGE_PASSWORD);
         return;
       }
       if (y >= 340 && y <= 395 && x >= 170 && x <= 305) { confirmAndSaveMember(); return; }
