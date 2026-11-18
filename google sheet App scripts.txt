@@ -1,157 +1,116 @@
-// =================================================================
-// SMART KEY BOX V2 - GAS API (GET & POST DUAL MODE - FIXED)
-// =================================================================
-
-function doPost(e) {
-  try {
-    var data = {};
-    if (e && e.postData && e.postData.contents) {
-      data = JSON.parse(e.postData.contents);
-    }
-    return handleAction(data);
-  } catch (err) {
-    return createJsonResponse({ "success": false, "message": "POST Error: " + err.toString() });
-  }
-}
-
 function doGet(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(10000);
+  
   try {
-    var params = e && e.parameter ? e.parameter : {};
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    // กรณีมีการส่ง payload มาแบบ URL-encoded ในพารามิเตอร์ "data"
-    if (params.data) {
-      var decodedData = JSON.parse(params.data);
-      return handleAction(decodedData);
+    if (e && e.parameter && e.parameter.action === "ping") {
+      return ContentService.createTextOutput(JSON.stringify({success: true, message: "pong"}))
+        .setMimeType(ContentService.MimeType.JSON);
     }
     
-    var action = params.action;
-    if (!action) {
-      return createJsonResponse({ success: true, message: "SMART KEY BOX V2 API IS ACTIVE" });
+    var dataString = e.parameter.data;
+    if (!dataString) {
+      return ContentService.createTextOutput(JSON.stringify({success: false, error: "No data provided"}))
+        .setMimeType(ContentService.MimeType.JSON);
     }
     
-    return handleAction(params);
+    var data = JSON.parse(dataString);
+    var action = data.action;
     
-  } catch (err) {
-    return createJsonResponse({ "success": false, "message": "GET Error: " + err.toString() });
-  }
-}
-
-// 🛠️ รวมชุดคำสั่งทั้งหมดไว้ภายในฟังก์ชัน handleAction อย่างถูกต้อง
-function handleAction(data) {
-  var action = data.action;
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  if (action === "ping") {
-    return createJsonResponse({ "success": true, "message": "PONG" });
-  }
-
-  // -------------------------------------------------------------
-  // 1. ACTION: addMember
-  // -------------------------------------------------------------
-  if (action === "addMember") {
-    var memberSheet = ss.getSheetByName("Members");
-    if (!memberSheet) return createJsonResponse({ "success": false, "message": "Sheet Members not found" });
-
-    var now = new Date();
-    var timestamp = Utilities.formatDate(now, "Asia/Bangkok", "yyyy-MM-dd HH:mm:ss");
-
-    memberSheet.appendRow([
-      String(data.memberID || "").trim(),
-      String(data.name || "").trim(),
-      String(data.fingerID || "").trim(),
-      String(data.role || "Member").trim(),
-      String(data.status || "Active").trim(),
-      String(data.phone || "").trim(),
-      timestamp
-    ]);
-
-    return createJsonResponse({ "success": true, "message": "Member added successfully" });
-  }
-  
-  // -------------------------------------------------------------
-  // 2. ACTION: deleteMember
-  // -------------------------------------------------------------
-  if (action === "deleteMember") {
-    var memberSheet = ss.getSheetByName("Members");
-    if (!memberSheet) return createJsonResponse({ "success": false, "message": "Sheet Members not found" });
-
-    var rows = memberSheet.getDataRange().getValues();
-    var deleted = false;
-    var targetID = String(data.memberID || "").trim();
-
-    for (var i = 1; i < rows.length; i++) {
-      if (String(rows[i][0]).trim() === targetID && targetID !== "") {
-        memberSheet.deleteRow(i + 1);
-        deleted = true;
-        break;
+    // ==========================================
+    // 1. บันทึกประวัติการใช้งาน (logHistory)
+    // ==========================================
+    if (action === "logHistory") {
+      var sheet = ss.getSheetByName("History") || ss.getSheetByName("HistoryLog") || ss.getSheets()[0];
+      var timestamp = new Date();
+      sheet.appendRow([timestamp, data.memberID, data.name, data.keyID, data.event]);
+      return ContentService.createTextOutput(JSON.stringify({success: true}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // ==========================================
+    // 2. บันทึกเหตุการณ์ยืม-คืน (borrowReturn)
+    // ==========================================
+    else if (action === "borrowReturn") {
+      var sheet = ss.getSheetByName("History") || ss.getSheetByName("HistoryLog") || ss.getSheets()[0];
+      var timestamp = new Date();
+      sheet.appendRow([timestamp, data.memberID, data.name, data.keyID, data.event]);
+      return ContentService.createTextOutput(JSON.stringify({success: true}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // ==========================================
+    // 3. อัปเดตสถานะกุญแจ (updateKeyStatus)
+    // ==========================================
+    else if (action === "updateKeyStatus") {
+      var sheet = ss.getSheetByName("Keys") || ss.getSheetByName("KeyStatus");
+      if (sheet) {
+        var rows = sheet.getDataRange().getValues();
+        for (var i = 1; i < rows.length; i++) {
+          if (rows[i][0] == data.keyID) {
+            sheet.getRange(i + 1, 2).setValue(data.status);
+            sheet.getRange(i + 1, 3).setValue(data.borrower);
+            break;
+          }
+        }
       }
+      return ContentService.createTextOutput(JSON.stringify({success: true}))
+        .setMimeType(ContentService.MimeType.JSON);
     }
-
-    return createJsonResponse({ "success": true, "message": deleted ? "Deleted" : "Not found in sheet" });
-  }
-
-  // -------------------------------------------------------------
-  // 3. ACTION: borrowReturn / logHistory
-  // -------------------------------------------------------------
-  if (action === "borrowReturn" || action === "logHistory") {
-    var historySheet = ss.getSheetByName("History");
-    if (!historySheet) return createJsonResponse({ "success": false, "message": "Sheet History not found" });
-
-    var eventName = data.event || "UNKNOWN";
-    var now = new Date();
-    var timestamp = Utilities.formatDate(now, "Asia/Bangkok", "yyyy-MM-dd HH:mm:ss");
-
-    historySheet.appendRow([
-      timestamp,
-      String(data.memberID || "").trim(),
-      String(data.name || "").trim(),
-      String(data.keyID || "KEY-01").trim(),
-      eventName
-    ]);
-
-    return createJsonResponse({ "success": true, "message": "History updated" });
-  }
-
-  // -------------------------------------------------------------
-  // 4. ACTION: updateKeyStatus (อัปเดตสถานะแท็บ Keys ให้ลงถูกคอลัมน์)
-  // -------------------------------------------------------------
-  if (action === "updateKeyStatus") {
-    var keysSheet = ss.getSheetByName("Keys");
-    if (!keysSheet) return createJsonResponse({ "success": false, "message": "Sheet Keys not found" });
-
-    var keyID = String(data.keyID || "").trim(); // เช่น KEY-02
-    var status = String(data.status || "").trim(); // เช่น "Available" หรือ "Borrowed"
-    var borrower = String(data.borrower || "").trim(); // ชื่อผู้ยืม
-
-    var rows = keysSheet.getDataRange().getValues();
-    var updated = false;
-
-    // ค้นหาแถวที่ตรงกับ Key ID (สมมติว่า Col 1 หรือ Index 0 คือ KeyID)
-    for (var i = 1; i < rows.length; i++) {
-      if (String(rows[i][0]).trim() === keyID) {
-        
-        // 📌 ปรับเลขคอลัมน์ให้ตรงกับหัวตารางจริงของคุณ:
-        // Col 3 (คอลัมน์ C) = Status
-        // Col 4 (คอลัมน์ D) = BorrowerName (ชื่อผู้ยืม)
-        // Col 5 (คอลัมน์ E) = Timestamp (เวลาอัปเดตล่าสุด)
-        
-        keysSheet.getRange(i + 1, 3).setValue(status);   
-        keysSheet.getRange(i + 1, 4).setValue(borrower); 
-        keysSheet.getRange(i + 1, 5).setValue(Utilities.formatDate(new Date(), "Asia/Bangkok", "yyyy-MM-dd HH:mm:ss")); 
-        
-        updated = true;
-        break;
+    
+    // ==========================================
+    // 4. เพิ่มสมาชิกใหม่ (addMember) - [แก้ไขให้ตรงกับหัวตารางเป๊ะๆ]
+    // ==========================================
+    else if (action === "addMember") {
+      var sheet = ss.getSheetByName("Members");
+      if (!sheet) {
+        sheet = ss.insertSheet("Members");
+        sheet.appendRow(["MemberID", "Name", "FingerID", "Role", "Status", "Phone", "Timestamp"]);
       }
+      var timestamp = new Date();
+      
+      // เรียงลำดับตามหัวตารางของคุณ: MemberID, Name, FingerID, Role, Status, Phone, Timestamp
+      sheet.appendRow([
+        data.memberID || "",
+        data.name || "",
+        data.fingerID || "",
+        data.role || "Member",
+        data.status || "Active",
+        data.phone || "",
+        timestamp
+      ]);
+      
+      return ContentService.createTextOutput(JSON.stringify({success: true}))
+        .setMimeType(ContentService.MimeType.JSON);
     }
-
-    return createJsonResponse({ "success": true, "message": updated ? "Key status updated" : "Key ID not found in sheet" });
+    
+    // ==========================================
+    // 5. ลบสมาชิก (deleteMember)
+    // ==========================================
+    else if (action === "deleteMember") {
+      var sheet = ss.getSheetByName("Members");
+      if (sheet) {
+        var rows = sheet.getDataRange().getValues();
+        for (var i = 1; i < rows.length; i++) {
+          if (rows[i][0] == data.memberID) {
+            sheet.deleteRow(i + 1);
+            break;
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({success: true}))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({success: false, error: "Invalid action"}))
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({success: false, error: error.toString()}))
+      .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
-
-  return createJsonResponse({ "success": false, "message": "Unknown action: " + action });
-}
-
-function createJsonResponse(data) {
-  return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
 }
