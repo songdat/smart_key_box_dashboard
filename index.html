@@ -18,6 +18,28 @@
 .settings{margin-top:18px}.settings summary{cursor:pointer;color:#a9bad0;font-size:13px;padding:13px 0}.setting-row{display:flex;gap:10px;flex-wrap:wrap;padding-bottom:14px}.setting-row input{flex:1;min-width:240px;background:#0c1626;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:11px}.hint{font-size:11px;color:var(--muted);line-height:1.6;margin:0 0 12px}.foot{text-align:center;color:#64758d;font-size:11px;padding:22px}
 @media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.keys{grid-template-columns:repeat(2,1fr)}.top{align-items:flex-start;flex-direction:column}.actions{width:100%}.btn{flex:1}.wrap{padding:16px}}
 @media(max-width:420px){.grid{gap:9px}.card{padding:13px}.metric .value{font-size:25px}.search{min-width:130px;width:100%}.section-head{align-items:flex-start;flex-direction:column}.tools{width:100%}}
+
+/* =========================================
+   AI ROBOT WIDGET (หุ่นยนต์ครึ่งตัวลอยได้)
+   ========================================= */
+#ai-robot-widget{position:fixed;bottom:22px;right:22px;width:330px;max-width:calc(100vw - 24px);background:linear-gradient(145deg,#142137,#0f192b);border:1px solid #37658e;border-radius:18px;box-shadow:0 16px 38px #0008;overflow:hidden;z-index:9999;user-select:none}
+.robot-drag-bar{background:linear-gradient(135deg,#1d936f,#2466b4);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:grab;touch-action:none}
+.robot-drag-bar:active{cursor:grabbing}
+.robot-drag-title{font-size:13px;font-weight:700;color:#fff;display:flex;align-items:center;gap:6px}
+.robot-toggle-btn{background:#ffffff2e;border:0;color:#fff;border-radius:7px;padding:2px 9px;font-size:13px;font-weight:700;cursor:pointer}
+.robot-body-wrap{padding:10px 14px 6px;background:radial-gradient(circle at top,#35d39a24,transparent 70%);display:flex;flex-direction:column;align-items:center}
+.half-robot-svg{width:120px;height:82px;animation:halfRobotFloat 2.8s ease-in-out infinite}
+@keyframes halfRobotFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.robot-reply-box{width:100%;max-height:160px;overflow-y:auto;background:#0b1220;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:6px;font-size:12.5px;line-height:1.55;color:var(--text);user-select:text}
+.quick-ask-row{display:flex;gap:6px;overflow-x:auto;padding:8px 12px 4px}
+.quick-ask-btn{background:var(--panel2);color:var(--blue);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap}
+.quick-ask-btn:hover{background:#223554}
+.robot-input-bar{display:flex;gap:8px;padding:8px 12px 12px}
+.robot-input-bar input{flex:1;background:#0c1626;border:1px solid var(--line);border-radius:10px;padding:9px 11px;color:var(--text);font-size:12.5px;outline:none}
+.robot-input-bar input:focus{border-color:var(--blue)}
+.robot-input-bar button{background:var(--green);color:#06251b;border:0;border-radius:10px;padding:0 14px;font-size:12.5px;font-weight:700;cursor:pointer}
+.robot-input-bar button:disabled{opacity:.5;cursor:wait}
+#ai-robot-widget.collapsed .robot-collapsible{display:none}
 </style>
 </head>
 <body>
@@ -67,9 +89,53 @@
     <summary>⚙ ตั้งค่าการเชื่อมต่อ Google Sheets API</summary>
     <p class="hint">วาง URL ของ Google Apps Script Web App ที่ลงท้ายด้วย /exec แล้วกดบันทึก URL นี้จะถูกเก็บไว้ในเบราว์เซอร์เครื่องนี้ ไม่ได้ส่งไปที่อื่น</p>
     <div class="setting-row"><input id="apiUrl" type="url" placeholder="https://script.google.com/macros/s/...../exec"><button class="btn primary" id="saveUrl">บันทึก URL</button></div>
-    <p class="hint">Dashboard รุ่นนี้อ่านข้อมูลผ่าน action=ping และ action=getData ตาม API เดิม</p>
+    <p class="hint">Dashboard รุ่นนี้อ่านข้อมูลผ่าน action=ping, action=getData และถามผู้ช่วย AI ผ่าน action=askAI</p>
   </details>
   <div class="foot">SMART KEY BOX · Google Sheets Database · GitHub Pages</div>
+</div>
+
+<!-- ตัวหุ่นยนต์ครึ่งตัวลอยได้ + ช่องพิมพ์ถามด้านล่าง -->
+<div id="ai-robot-widget">
+  <div class="robot-drag-bar" id="robot-drag-handle">
+    <div class="robot-drag-title">🤖 KeyBot AI Assistant</div>
+    <button class="robot-toggle-btn" id="robot-collapse-btn" title="ย่อ/ขยาย">─</button>
+  </div>
+
+  <div class="robot-collapsible">
+    <div class="robot-body-wrap">
+      <svg class="half-robot-svg" viewBox="0 0 160 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <line x1="80" y1="8" x2="80" y2="20" stroke="#62a8ff" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="80" cy="7" r="5" fill="#f6bd55"/>
+        <rect x="44" y="20" width="72" height="44" rx="14" fill="#eaf1fb" stroke="#91a2ba" stroke-width="2"/>
+        <rect x="52" y="27" width="56" height="26" rx="9" fill="#0b1220"/>
+        <circle cx="67" cy="40" r="5" fill="#35d39a"/>
+        <circle cx="93" cy="40" r="5" fill="#35d39a"/>
+        <circle cx="68.5" cy="38.5" r="1.6" fill="#ffffff"/>
+        <circle cx="94.5" cy="38.5" r="1.6" fill="#ffffff"/>
+        <rect x="36" y="34" width="8" height="16" rx="3" fill="#62a8ff"/>
+        <rect x="116" y="34" width="8" height="16" rx="3" fill="#62a8ff"/>
+        <path d="M26 78 C22 78 20 82 22 86 L34 94 L38 87 L29 81 Z" fill="#91a2ba"/>
+        <path d="M134 78 C138 78 140 82 138 86 L126 94 L122 87 L131 81 Z" fill="#91a2ba"/>
+        <path d="M42 70 C42 66 46 64 50 64 L110 64 C114 64 118 66 118 70 L124 108 L36 108 Z" fill="#eaf1fb" stroke="#91a2ba" stroke-width="2"/>
+        <rect x="60" y="74" width="40" height="18" rx="6" fill="#111c2e" stroke="#62a8ff" stroke-width="1.5"/>
+        <circle cx="71" cy="83" r="3" fill="#35d39a"/>
+        <circle cx="80" cy="83" r="3" fill="#f6bd55"/>
+        <circle cx="89" cy="83" r="3" fill="#62a8ff"/>
+      </svg>
+      <div class="robot-reply-box" id="robot-reply">สวัสดีครับ! ผมคือ <b>KeyBot</b> ผู้ช่วยประจำตู้กุญแจอัจฉริยะ พิมพ์คำถามด้านล่างเพื่อดูสรุปสถานะกุญแจหรือประวัติการใช้งานได้เลยครับ</div>
+    </div>
+
+    <div class="quick-ask-row">
+      <button class="quick-ask-btn" onclick="askQuick('สรุปสถานะกุญแจตอนนี้')">สรุปสถานะกุญแจ</button>
+      <button class="quick-ask-btn" onclick="askQuick('มีกุญแจห้องไหนที่ยังไม่คืนบ้าง')">กุญแจยังไม่คืน</button>
+      <button class="quick-ask-btn" onclick="askQuick('สรุปประวัติการยืมคืนล่าสุด')">ประวัติล่าสุด</button>
+    </div>
+
+    <div class="robot-input-bar">
+      <input type="text" id="robot-question-input" placeholder="พิมพ์คำถามให้หุ่นยนต์ AI..." onkeydown="if(event.key==='Enter') sendToRobotAI()">
+      <button id="robot-send-btn" onclick="sendToRobotAI()">ส่ง</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -81,11 +147,9 @@ $('apiUrl').value = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
 
 let autoRefreshTimer = null;
 
-// ฟังก์ชันแปลงเวลาให้ออกมาเป็นเวลาประเทศไทย (Asia/Bangkok)
 function formatThaiTime(isoString) {
   if (!isoString) return "-";
   let date = new Date(isoString);
-  // ตรวจสอบความถูกต้องของวันที่
   if (isNaN(date.getTime())) return String(isoString);
   return date.toLocaleString('th-TH', {
     timeZone: 'Asia/Bangkok',
@@ -174,7 +238,6 @@ function renderKeys(){
 function renderHistory(){
  const q=$('historySearch').value.toLowerCase();
  const rows=[...db.history].reverse().filter(h=>JSON.stringify(h).toLowerCase().includes(q));
- 
  $('historyBody').innerHTML=rows.length?rows.map(h=>`
    <tr>
      <td>${cell(formatThaiTime(pick(h,['Timestamp','timestamp','เวลา'])))}</td>
@@ -186,10 +249,10 @@ function renderHistory(){
  `).join(''):'<tr><td colspan="5" class="empty">ยังไม่มีประวัติการใช้งาน</td></tr>';
 }
 
-async function apiRequest(action){
+async function apiRequest(action, extraParams=''){
  const base=$('apiUrl').value.trim();
  if(!base) throw new Error('กรุณาวาง Google Apps Script Web App URL ในส่วนตั้งค่าการเชื่อมต่อก่อน');
- const url=base+(base.includes('?')?'&':'?')+'action='+encodeURIComponent(action);
+ const url=base+(base.includes('?')?'&':'?')+'action='+encodeURIComponent(action)+extraParams;
  const response=await fetch(url,{method:'GET',redirect:'follow'});
  if(!response.ok) throw new Error(`HTTP ${response.status}: ไม่สามารถเรียก API ได้`);
  const text=await response.text();
@@ -262,6 +325,82 @@ $('refreshBtn').addEventListener('click', () => refresh(false));
 $('memberSearch').addEventListener('input',renderMembers);
 $('keySearch').addEventListener('input',renderKeys);
 $('historySearch').addEventListener('input',renderHistory);
+
+// =========================================
+// AI ROBOT WIDGET LOGIC (ลากย้าย + ถามตอบ)
+// =========================================
+const robotWidget = $('ai-robot-widget');
+const dragHandle = $('robot-drag-handle');
+const collapseBtn = $('robot-collapse-btn');
+const replyBox = $('robot-reply');
+const questionInput = $('robot-question-input');
+const sendBtn = $('robot-send-btn');
+
+collapseBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  robotWidget.classList.toggle('collapsed');
+  collapseBtn.textContent = robotWidget.classList.contains('collapsed') ? '+' : '─';
+});
+
+let isDragging = false, startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
+
+function startDrag(e) {
+  if (e.target === collapseBtn) return;
+  isDragging = true;
+  const point = e.touches ? e.touches[0] : e;
+  startX = point.clientX;
+  startY = point.clientY;
+  const rect = robotWidget.getBoundingClientRect();
+  initialLeft = rect.left;
+  initialTop = rect.top;
+  robotWidget.style.right = 'auto';
+  robotWidget.style.bottom = 'auto';
+  robotWidget.style.left = initialLeft + 'px';
+  robotWidget.style.top = initialTop + 'px';
+}
+
+function moveDrag(e) {
+  if (!isDragging) return;
+  const point = e.touches ? e.touches[0] : e;
+  const maxLeft = Math.max(0, window.innerWidth - robotWidget.offsetWidth);
+  const maxTop = Math.max(0, window.innerHeight - robotWidget.offsetHeight);
+  robotWidget.style.left = Math.min(maxLeft, Math.max(0, initialLeft + point.clientX - startX)) + 'px';
+  robotWidget.style.top = Math.min(maxTop, Math.max(0, initialTop + point.clientY - startY)) + 'px';
+}
+
+function endDrag() { isDragging = false; }
+
+dragHandle.addEventListener('mousedown', startDrag);
+document.addEventListener('mousemove', moveDrag);
+document.addEventListener('mouseup', endDrag);
+dragHandle.addEventListener('touchstart', startDrag, {passive: true});
+document.addEventListener('touchmove', moveDrag, {passive: true});
+document.addEventListener('touchend', endDrag);
+
+function askQuick(text) {
+  questionInput.value = text;
+  sendToRobotAI();
+}
+
+async function sendToRobotAI() {
+  const question = questionInput.value.trim();
+  if (!question) return;
+
+  questionInput.value = '';
+  sendBtn.disabled = true;
+  replyBox.innerHTML = `<div style="color:var(--muted);margin-bottom:6px">คุณ: ${escapeHtml(question)}</div><div>🤖 กำลังวิเคราะห์ข้อมูลจากตู้กุญแจ...</div>`;
+
+  try {
+    const data = await apiRequest('askAI', '&q=' + encodeURIComponent(question));
+    const formatted = escapeHtml(data.answer || 'ไม่พบคำตอบจากระบบ').replace(/\n/g, '<br>');
+    replyBox.innerHTML = `<div style="color:var(--blue);font-size:11.5px;margin-bottom:6px"><b>คำถาม:</b> ${escapeHtml(question)}</div><div>${formatted}</div>`;
+  } catch (err) {
+    replyBox.innerHTML = `<span style="color:var(--red)">เกิดข้อผิดพลาด: ${escapeHtml(err.message)}</span>`;
+  } finally {
+    sendBtn.disabled = false;
+    replyBox.scrollTop = replyBox.scrollHeight;
+  }
+}
 
 if($('apiUrl').value.trim()) {
   refresh(false);
